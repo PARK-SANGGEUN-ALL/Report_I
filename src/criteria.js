@@ -192,7 +192,19 @@ function buildCommonHeader(parsed, name, major, curr, ranks, univFitData) {
   const achvStr = achv.map(a => 
     `${a.grade}${a.semester} ${a.subject}(${a.group||'?'}): 성취도${a.achievement}, 분포${a.distribution}, 수강자${a.students}`
   ).join('\n');
-  const behaviorStr = (parsed.behaviorOpinion || '').slice(0, 3000);
+  // behaviorOpinion이 객체({1학년:"...",2학년:"..."}) 또는 문자열일 수 있음 → 안전하게 문자열화
+  let behaviorStr = '';
+  if (parsed.behaviorOpinion) {
+    if (typeof parsed.behaviorOpinion === 'string') {
+      behaviorStr = parsed.behaviorOpinion;
+    } else if (typeof parsed.behaviorOpinion === 'object') {
+      // {1학년: "...", 2학년: "..."} → "1학년: ...\n2학년: ..."
+      behaviorStr = Object.entries(parsed.behaviorOpinion)
+        .map(([k, v]) => `${k}: ${v}`)
+        .join('\n');
+    }
+  }
+  behaviorStr = behaviorStr.slice(0, 3000);
 
   const univFitStr = (univFitData || []).map(f => {
     const lines = [];
