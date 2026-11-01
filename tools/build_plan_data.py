@@ -81,3 +81,8 @@ for r in d['rows']:
 json.dump({'plan': plan, 'chg': chg, 'key': key}, open('src/data/plan2028.json', 'w', encoding='utf-8'), ensure_ascii=False, separators=(',', ':'))
 json.dump(rows, open('src/data/deptAdmit.json', 'w', encoding='utf-8'), ensure_ascii=False, separators=(',', ':'))
 print('plan univs', len(plan), 'chg', len(chg), 'key', len(key), 'dept rows', len(rows))
+
+# 4) 입력 화면 드롭다운용 대학→학과 목록
+m = collections.defaultdict(set)
+for r in rows: m[r[0]].add(r[3])
+json.dump({u: sorted(v) for u, v in sorted(m.items())}, open('src/data/univDepts.json', 'w', encoding='utf-8'), ensure_ascii=False, separators=(',', ':'))

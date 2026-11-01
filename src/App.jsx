@@ -10,6 +10,7 @@ import "./styles.css";
 import Intake from "./views/Intake.jsx";
 import Report from "./views/Report.jsx";
 import { DEMO_G } from "./demoData.js";
+import { applyQuant, tierOf, fitWord } from "./scoring.js";
 
 const UNIVS = ["강원대학교","건국대학교","경기대학교","경북대학교","경희대학교","고려대학교","광운대학교","국민대학교","단국대학교","덕성여자대학교","동국대학교","부산대학교","서강대학교","서울과학기술대학교","서울대학교","서울시립대학교","성균관대학교","세종대학교","숙명여자대학교","숭실대학교","아주대학교","연세대학교","이화여자대학교","인하대학교","중앙대학교","한국외국어대학교","한양대학교","홍익대학교"];
 
@@ -429,8 +430,16 @@ export default function App() {
       setProg(40); setStep("정밀 분석 가동 — 4개 분석 엔진 동시 실행 중... (60~90초)");
       const nameForPrompt = inName||parsed.studentInfo?.name;
 
-      const phase2Prompt = buildPhase2Prompt(parsed, json, nameForPrompt, inMajor, finalCurr, ranks, univFitData);
-      const phase3Prompt = buildPhase3Prompt(parsed, json, {}, nameForPrompt, inMajor, finalCurr, ranks, univFitData);
+      // 🆕 「그들이 좋아하는 탐구」 기반 탐구 수준 지식(희망 학과군별 적정 수준) — 분석 시점에만 로드
+      let levelText = "", levelInfo = null;
+      try {
+        const lb = await import("./levelBlock.js");
+        const tg = ranks.filter(r => r.u && r.d);
+        levelText = lb.buildLevelBlock({ targets: tg, major: inMajor });
+        levelInfo = lb.levelInfoFor({ targets: tg, major: inMajor });
+      } catch (e) { console.warn("[levelBlock] 로드 실패 — 기본 기준만 사용", e?.message); }
+      const phase2Prompt = buildPhase2Prompt(parsed, json, nameForPrompt, inMajor, finalCurr, ranks, univFitData, levelText);
+      const phase3Prompt = buildPhase3Prompt(parsed, json, {}, nameForPrompt, inMajor, finalCurr, ranks, univFitData, levelText);
       const phase4Prompt = buildPhase4Prompt(parsed, json, {}, {}, nameForPrompt, inMajor, finalCurr, ranks, univFitData);
       // 🆕 업로드 자료 기반 실제 2028 전형 현황·학과별 입결 블록 (분석 시점에만 로드)
       let extraBlock = "";
@@ -438,7 +447,7 @@ export default function App() {
         const pb = await import("./planBlock.js");
         extraBlock = pb.buildExtra({ targets: ranks.filter(r => r.u && r.d), is2022: (finalCurr||"").includes("2022") });
       } catch (e) { console.warn("[planBlock] 로드 실패 — 기본 근거만 사용", e?.message); }
-      const phase5Prompt = buildPhase5Prompt(parsed, json, {}, {}, nameForPrompt, ranks, univFitData, extraBlock);
+      const phase5Prompt = buildPhase5Prompt(parsed, json, {}, {}, nameForPrompt, ranks, univFitData, extraBlock + "\n\n" + levelText);
 
       // 🆕 Phase5용 웹 검색 대상 — 사용자가 입력한 지원 희망 대학·학과(1~3순위)를 중복 제거해서 전달
       const searchTargets = ranks
@@ -468,6 +477,7 @@ export default function App() {
       if (phase2Json.activities) json.activities = phase2Json.activities;
       if (phase2Json.activityInsight) json.activityInsight = phase2Json.activityInsight;
       if (phase2Json.inquiryThreads) json.inquiryThreads = phase2Json.inquiryThreads;
+      if (phase2Json.connectionAnalysis) json.connectionAnalysis = phase2Json.connectionAnalysis;
       if (phase2Json.keywords) json.keywords = phase2Json.keywords;
       if (phase2Json.keywordAnalysis) json.keywordAnalysis = phase2Json.keywordAnalysis;
       if (phase2Json.methodAnalysis) json.methodAnalysis = phase2Json.methodAnalysis;
@@ -495,6 +505,10 @@ export default function App() {
       if (phase5Json.univRecommendRank) json.univRecommendRank = phase5Json.univRecommendRank;
       if (phase5Json.deptRecommendRank) json.deptRecommendRank = phase5Json.deptRecommendRank;
       if (phase5Json.finalRecommendation) json.finalRecommendation = phase5Json.finalRecommendation;
+      if (phase5Json.executiveSummary) json.executiveSummary = phase5Json.executiveSummary;
+      // 🆕 정량 채점: 학업·탐구역량은 코드 계산 기본점수 ±3으로 확정, 총점 재합산
+      try { applyQuant(json, inMajor || (ranks.find(r => r.d) || {}).d); } catch (e) { console.warn('[quant]', e?.message); }
+      json._levelInfo = levelInfo;
 
       setProg(90); setStep("결과 후처리 중...");
 
@@ -608,50 +622,31 @@ export default function App() {
   const exportWord = () => {
     if(!G) return;
     const esc=(s)=>String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
-    // 하이라이트 마크업 → HTML 변환
-    const fmt=(s)=>esc(s)
-      .replace(/\*\*([^*]+)\*\*/g,'<b>$1</b>')
-      .replace(/《([^》]+)》/g,'<span style="background:#fde68a;padding:1px 3px;font-weight:bold;">$1</span>')
-      .replace(/「([^」]+)」/g,'<span style="color:#2745a8;font-weight:bold;">$1</span>')
-      .replace(/\n/g,'<br/>');
-    const G2=G;
-    const sec=(title,color,inner)=>`<div style="margin:0 0 22px 0;border:2px solid ${color};border-radius:8px;overflow:hidden;">
-      <div style="background:${color};color:#fff;padding:10px 16px;font-size:15px;font-weight:bold;">${title}</div>
-      <div style="padding:16px 18px;font-size:13px;line-height:1.9;color:#222;text-align:justify;">${inner}</div></div>`;
-
-    let body='';
-    // 헤더
-    body+=`<div style="text-align:center;border-bottom:3px double #0e1430;padding-bottom:16px;margin-bottom:24px;">
-      <div style="font-size:24px;font-weight:bold;color:#0e1430;">학생부종합전형 분석 리포트</div>
-      <div style="font-size:13px;color:#555;margin-top:6px;">${esc(G2.schoolName||"")} · ${esc(name)} 학생 · ${esc(G2.stageLabel||"")}</div>
-      <div style="font-size:11px;color:#888;margin-top:6px;">리포트아이(Report-I) · 발행일 ${new Date().toLocaleDateString("ko-KR")} · 평균등급 ${esc(G2.gradeAvg||"-")} · 종합 ${total}점(${grd}등급)</div>
-    </div>`;
-    // 요약 편지
-    if(G2.summaryLetter) body+=sec("💌 핵심 요약","#f59e0b",fmt(G2.summaryLetter));
-    // 강점
-    if(G2.strengths?.length) body+=sec("✦ 핵심 강점","#2b8a3e",
-      G2.strengths.map(s=>`<div style="margin-bottom:8px;"><b>${esc(s.title||s.area||"")}</b><br/>${fmt(s.detail||s.content||s.description||"")}</div>`).join(""));
-    // 역량
-    if(G2.competencies?.length) body+=sec("⚡ 역량 평가","#6741d9",
-      G2.competencies.map(c=>`<div style="margin-bottom:6px;"><b>${esc(c.name)}: ${esc(c.score)}점</b> — ${fmt(c.reason||c.comment||"")}</div>`).join(""));
-    // 추천 학과
-    if(G2.recommendedMajors?.length) body+=sec("🎯 추천 학과","#0c8599",
-      G2.recommendedMajors.slice(0,5).map((m,i)=>`<div style="margin-bottom:6px;"><b>${i+1}. ${esc(m.major||m.name)}</b> (${esc(m.score||m.fitScore||"")}%)<br/>${fmt(m.reason||m.summary||"")}</div>`).join(""));
-    // 종합 리포트 편지
-    if(G2.reportLetter) body+=sec("📄 종합 분석 리포트","#2745a8",fmt(G2.reportLetter));
-    body+=`<div style="text-align:center;font-size:10px;color:#999;margin-top:24px;padding-top:12px;border-top:1px solid #ddd;">리포트아이(Report-I) · 본 자료는 참고용이며 실제 입시 결과와 차이가 있을 수 있습니다.</div>`;
-
-    const html=`<!DOCTYPE html><html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word"><head><meta charset="utf-8"><title>리포트</title>
-      <style>@page{size:A4;margin:2cm;} body{font-family:'맑은 고딕','Malgun Gothic',sans-serif;}</style></head>
-      <body>${body}</body></html>`;
-    const blob=new Blob(['\ufeff'+html],{type:'application/msword'});
-    const url=URL.createObjectURL(blob);
-    const a=document.createElement('a');
-    a.href=url; a.download=`${name}_학생부분석리포트.doc`;
-    document.body.appendChild(a); a.click(); document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    const fmt=(s)=>esc(s).replace(/\*\*([^*]+)\*\*/g,'<b>$1</b>').replace(/《([^》]+)》/g,'<b style="background:#fde68a;">$1</b>').replace(/「([^」]+)」/g,'<b style="color:#0b7a77;">$1</b>').replace(/\n/g,'<br/>');
+    const ov=tierOf(total,100); const MX={academic:40,inquiry:25,career:15,community:10,growth:10};
+    const NM={academic:"학업역량",inquiry:"탐구역량",career:"진로역량",community:"공동체역량",growth:"성장역량"};
+    const h2=(t)=>`<h2 style="font-size:15pt;border-bottom:1.5pt solid #14203f;padding-bottom:3pt;margin:20pt 0 8pt;color:#14203f;">${t}</h2>`;
+    const th=(t)=>`<th style="background:#f6f2ea;border:0.5pt solid #cfc6b8;padding:4pt 6pt;font-size:10pt;text-align:left;">${t}</th>`;
+    const td=(t)=>`<td style="border:0.5pt solid #e2d8c8;padding:4pt 6pt;font-size:10pt;vertical-align:top;">${t}</td>`;
+    let b=`<div style="border-bottom:2pt solid #14203f;padding-bottom:8pt;margin-bottom:14pt;"><div style="font-size:9pt;color:#0b7a77;letter-spacing:2pt;">REPORT·I</div>
+      <div style="font-size:22pt;font-weight:bold;color:#14203f;">학생부 정밀 진단 보고서</div>
+      <div style="font-size:10pt;color:#555;margin-top:4pt;">${esc(G.schoolName||"")} · ${esc(name)} 학생 · ${esc(G.stageLabel||"")} · 평균등급 ${esc(G.gradeAvg||"-")} · ${new Date().toLocaleDateString("ko-KR")}</div></div>`;
+    b+=`<div style="background:#f6f2ea;border-top:3pt solid #0f9a90;padding:8pt 12pt;font-size:11pt;"><b>종합 수준 판정 · ${esc(ov.label)}</b> (${esc(ov.ex)})<br/>${fmt(G.executiveSummary?.headline||G.scoreSummary||"")}</div>`;
+    if(G.competencies){ b+=h2("1. 역량별 수준과 근거"); b+=`<table style="width:100%;border-collapse:collapse;"><tr>${th("역량")}${th("수준")}${th("플러스(＋) 근거")}${th("마이너스(－) 근거")}</tr>`+
+      Object.keys(NM).map(k=>{const c=G.competencies[k]||{};const t=tierOf(c.score,MX[k]);const bd=c.scoreBreakdown||{};
+        return `<tr>${td("<b>"+NM[k]+"</b>")}${td(esc(t.shortLabel))}${td((bd.plusFactors||[]).map(x=>"· "+fmt(x.reason)).join("<br/>"))}${td((bd.minusFactors||[]).map(x=>"· "+fmt(x.reason)).join("<br/>"))}</tr>`;}).join("")+`</table>`; }
+    if(G.strengths?.length) b+=h2("2. 핵심 강점")+G.strengths.map(s=>`<p style="font-size:11pt;line-height:1.8;margin:0 0 6pt;"><b>${esc(s.title||"")}</b> — ${fmt(s.content||"")}</p>`).join("");
+    if(G.weaknesses?.length) b+=h2("3. 보완점")+G.weaknesses.map(s=>`<p style="font-size:11pt;line-height:1.8;margin:0 0 6pt;"><b>${esc(s.title||"")}</b> — ${fmt(s.content||"")}</p>`).join("");
+    if(G.recommendedMajors?.length) b+=h2("4. 탐구가 가리키는 추천학과")+`<table style="width:100%;border-collapse:collapse;"><tr>${th("순위")}${th("학과")}${th("적합도")}${th("근거")}</tr>`+G.recommendedMajors.slice(0,5).map((m,i)=>`<tr>${td(i+1)}${td("<b>"+esc(m.major)+"</b>")}${td(esc(fitWord(m.score)))}${td(fmt(m.reason||""))}</tr>`).join("")+`</table>`;
+    const F=G.finalRecommendation; if(F?.top10?.length) b+=h2("5. 지원 추천")+`<table style="width:100%;border-collapse:collapse;"><tr>${th("순위")}${th("대학·학과")}${th("전형")}${th("라인")}${th("추정 합격가능성")}${th("근거")}</tr>`+F.top10.map((r,i)=>`<tr>${td(r.rank||i+1)}${td("<b>"+esc(r.univ)+"</b><br/>"+esc(r.dept))}${td(esc(r.admissionType)+(r.hasInterview?" (면접)":""))}${td(esc(r.tier))}${td(r.admissionProbability?r.admissionProbability.min+"~"+r.admissionProbability.max+"%":"-")}${td(fmt(r.reason||""))}</tr>`).join("")+`</table>`+(F.interviewCaveat?`<p style="font-size:10pt;color:#8a5a00;">※ ${fmt(F.interviewCaveat)}</p>`:"");
+    if(F?.avoid?.length) b+=h2("6. 현재로선 피하는 것이 좋은 대학·학과")+F.avoid.map(a=>`<p style="font-size:11pt;margin:0 0 5pt;"><b>${esc(a.univ)}${a.dept?" · "+esc(a.dept):""}</b> — ${fmt(a.reason)}</p>`).join("");
+    if(G.summaryLetter) b+=h2("7. 상담 의견")+`<p style="font-size:11.5pt;line-height:1.95;font-family:'바탕',serif;">${fmt(G.summaryLetter)}</p>`;
+    if(G.reportLetter) b+=`<p style="font-size:11pt;line-height:1.9;font-family:'바탕',serif;">${fmt(G.reportLetter)}</p>`;
+    b+=`<div style="font-size:8.5pt;color:#999;margin-top:18pt;padding-top:6pt;border-top:0.5pt solid #ddd;">리포트아이(Report-I) · 본 보고서는 참고용이며 실제 입시 결과와 차이가 있을 수 있습니다.</div>`;
+    const html=`<!DOCTYPE html><html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word"><head><meta charset="utf-8"><title>보고서</title><style>@page{size:A4;margin:2cm;} body{font-family:'맑은 고딕','Malgun Gothic',sans-serif;color:#1c2538;}</style></head><body>${b}</body></html>`;
+    const blob=new Blob(['\ufeff'+html],{type:'application/msword'}); const url=URL.createObjectURL(blob);
+    const el=document.createElement('a'); el.href=url; el.download=`${name}_학생부진단보고서.doc`; document.body.appendChild(el); el.click(); document.body.removeChild(el); URL.revokeObjectURL(url);
   };
-
 
   // ── 새 화면용 보조 함수 ──
   const targets=[{u:u0,d:d0},{u:u1,d:d1},{u:u2,d:d2}];
@@ -662,7 +657,7 @@ export default function App() {
     if(!inMajor) setInMajor(d);
   };
   const removeTarget=(i)=>{ const sets=[[setU0,setD0,setQ0],[setU1,setD1,setQ1],[setU2,setD2,setQ2]]; sets[i][0]("");sets[i][1]("");sets[i][2](""); };
-  const loadDemo=()=>{ setG(DEMO_G); setInMajor("사학과"); setPhase("result"); };
+  const loadDemo=async()=>{ let li=null; try{ const lb=await import("./levelBlock.js"); li=lb.levelInfoFor({targets:[{d:"사학과"}],major:"사학과"}); }catch(e){} setG(applyQuant({...DEMO_G,_levelInfo:li},"사학과")); setInMajor("사학과"); setPhase("result"); };
   useEffect(()=>{ if(typeof window!=="undefined" && /[?&]demo=1/.test(window.location.search)) loadDemo(); },[]);
   const reset=()=>{ setPhase("landing"); setG(null); window.scrollTo({top:0}); };
 
