@@ -527,7 +527,7 @@ export default function App() {
       try { json._coreFit = computeCoreFit({ grades: [...(json.grades || []), ...(parsed.grades || [])], achievementSubjects: [...(json.achievementSubjects || []), ...(parsed.achievementSubjects || [])], curriculum: finalCurr }, ranks.filter(r => r.u && r.d), finalCurr); } catch (e) { console.warn('[coreFit]', e?.message); }
       try { applyQuant(json, inMajor || (ranks.find(r => r.d) || {}).d); } catch (e) { console.warn('[quant]', e?.message); }
       json._levelInfo = levelInfo;
-      try { const pb2 = await import("./planBlock.js"); (json.finalRecommendation?.top10 || []).forEach(r => { try { r._cut = pb2.cutInfoFor(r.univ, r.dept, r.admissionType); } catch (e) {} }); } catch (e) { console.warn("[cutInfo]", e?.message); }
+      try { const pb2 = await import("./planBlock.js"); (json.finalRecommendation?.top10 || []).forEach(r => { try { r._cut = pb2.cutInfoFor(r.univ, r.dept, r.admissionType); } catch (e) {} }); (json.deptReports || []).forEach(d => { try { const tg = ranks.find(x => x.u === d.univ && x.d === d.dept); d._cut = pb2.cutInfoFor(d.univ, d.dept, (tg && tg.t) || d.strategy?.전형추천 || "학생부종합"); } catch (e) {} }); } catch (e) { console.warn("[cutInfo]", e?.message); }
 
       setProg(90); setStep("결과 후처리 중...");
 
@@ -682,7 +682,7 @@ export default function App() {
     let G0={...DEMO_G,_levelInfo:li};
     if(is22){ const A=["A","A","B","A","B"], R=[18,22,45,60,32]; G0={...G0,curriculum:"2022",is2022:true,gradeAvg:"2.95",grades:DEMO_G.grades.map((r,i)=>({...r,level:Math.min(5,Math.max(1,Math.ceil(r.level*0.8))),achievement:A[i%5],distribution:`A:${R[i%5]}% B:30% C:20% D:10% E:5%`,students:"120",rawScore:String(95-(i%5)*4),avg:String(72-(i%4)*3)}))}; G0._ach2022=achievement2022(G0); }
     G0._coreFit=computeCoreFit(G0,[{u:"서울대",d:"사학과"},{u:"한양대",d:"사학과"}],G0.curriculum);
-    try{ const pb=await import("./planBlock.js"); (G0.finalRecommendation?.top10||[]).forEach(r=>{ try{ r._cut=pb.cutInfoFor(r.univ,r.dept,r.admissionType);}catch(e){} }); }catch(e){}
+    try{ const pb=await import("./planBlock.js"); (G0.finalRecommendation?.top10||[]).forEach(r=>{ try{ r._cut=pb.cutInfoFor(r.univ,r.dept,r.admissionType);}catch(e){} }); (G0.deptReports||[]).forEach(d=>{ try{ d._cut=pb.cutInfoFor(d.univ,d.dept,d.strategy?.전형추천||'학생부종합'); }catch(e){} }); }catch(e){}
     setG(applyQuant(G0,"사학과")); setInMajor("사학과"); setPhase("result"); };
   useEffect(()=>{ if(typeof window!=="undefined" && /[?&]demo=(1|2022)/.test(window.location.search)) loadDemo(); },[]);
   const reset=()=>{ setPhase("landing"); setG(null); window.scrollTo({top:0}); };

@@ -50,7 +50,6 @@ export default function Intake(p){
       <div className="proof">
         <span><b>3중 판정</b> 교과 · 탐구 · 정성</span>
         <span><b>3,289건</b> 2028 전형 대조</span>
-        <span><b>보수적 채점</b> 합격 사례로 보정</span>
       </div>
       <div className="kpis">
         <div className="kpi dark"><b>5</b><span>핵심 분석 장</span></div>
@@ -106,7 +105,7 @@ export default function Intake(p){
       {!p.err&&p.truncWarning&&<div className="warn">ℹ️ {p.truncWarning}</div>}
       {p.step&&<div className="prog"><div className="prog-bar"><i style={{width:p.prog+"%"}}/></div><div className="prog-t"><span>{p.step}</span><span className="mono">{p.prog}%</span></div></div>}
       <button className="cta" disabled={!ready||p.busy} onClick={p.run}>{p.busy?"판독 중입니다…":"내 생기부 판정받기"}</button>
-      <div className="note">실명·학교명은 AI에 전달하기 전에 가려집니다.</div>
+      <div className="note">실명·학교명은 분석 전에 자동으로 가려집니다.</div>
     </section>
   </div></>);
 }

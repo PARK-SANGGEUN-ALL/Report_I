@@ -125,3 +125,46 @@ export function GradeBand({ c50, c70, lo, hi, student, max = 9 }) {
     {c50 != null && <text x={Math.min(a, b ?? a)} y="24" fontSize="11" fill="#14203f" textAnchor="start" fontWeight="700"></text>}
   </svg>);
 }
+
+/* 탐구 깊이 매트릭스 — 학기 × 깊이 단계(점 크기=기록 수) */
+export function DepthMatrix({ cols, acts }) {
+  const rows = [4, 3, 2, 1]; const W = 720, H = 300, lx = 150, rx = 20, top = 40, rh = 54; const cw = (W - lx - rx) / cols.length;
+  const names = { 4: "4단계 성찰·확장", 3: "3단계 분석·실험", 2: "2단계 조사·분석", 1: "1단계 정리·참여" };
+  const colr = { 4: "#b8841d", 3: "#1f6f78", 2: "#4a7f9c", 1: "#8b94a8" };
+  const cnt = (c, d) => acts.filter(a => a.key === c && a.depthN === d).length; const mx = Math.max(1, ...cols.flatMap(c => rows.map(d => cnt(c, d))));
+  return (<svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: "auto", display: "block" }}>
+    {cols.map((c, i) => <text key={c} x={lx + cw * i + cw / 2} y="24" fontSize="14" fontWeight="800" fill="#16203a" textAnchor="middle">{c.replace("-", "학년 ")}학기</text>)}
+    {rows.map((d, r) => <g key={d}><rect x="10" y={top + r * rh} width={W - 20} height={rh} fill={r % 2 ? "#f7f8fb" : "#ffffff"} stroke="#d5dae6" />
+      <text x="20" y={top + r * rh + rh / 2 + 5} fontSize="14" fontWeight="800" fill={colr[d]}>{names[d]}</text>
+      {cols.map((c, i) => { const n = cnt(c, d); const rr = n ? 9 + 15 * (n / mx) : 0; return n ? <g key={c}><circle cx={lx + cw * i + cw / 2} cy={top + r * rh + rh / 2} r={rr} fill={colr[d]} opacity=".9" /><text x={lx + cw * i + cw / 2} y={top + r * rh + rh / 2 + 5} fontSize="14" fontWeight="900" fill="#fff" textAnchor="middle">{n}</text></g> : <circle key={c} cx={lx + cw * i + cw / 2} cy={top + r * rh + rh / 2} r="3" fill="#cfd5e2" />; })}</g>)}
+    <line x1="10" x2={W - 10} y1={top + 4 * rh} y2={top + 4 * rh} stroke="#16203a" strokeWidth="2" />
+    {cols.map((c, i) => { const l = acts.filter(a => a.key === c); const av = l.length ? (l.reduce((s, a) => s + a.depthN, 0) / l.length).toFixed(1) : "-"; return <g key={c}><text x={lx + cw * i + cw / 2} y={top + 4 * rh + 22} fontSize="13" fill="#51607e" textAnchor="middle">{l.length}건 · 평균 {av}</text></g>; })}
+    <text x="20" y={top + 4 * rh + 22} fontSize="13" fontWeight="800" fill="#16203a">기록 수 · 평균 깊이</text>
+  </svg>);
+}
+
+/* 역량별 수준 막대 — 6단계 수준 눈금 위에 역량별 위치 표시 */
+export function LevelBars({ items, steps }) {
+  const W = 760, lx = 120, rx = 14, rh = 54, top = 52, H = top + items.length * rh + 14; const n = steps.length; const sw = (W - lx - rx) / n;
+  return (<svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: "auto", display: "block" }}>
+    {steps.map((s, i) => <g key={i}><rect x={lx + sw * i} y="8" width={sw - 3} height="34" fill={i === 0 ? "#16203a" : i < 3 ? "#33507a" : i < 5 ? "#6b7a99" : "#a9b1c4"} /><text x={lx + sw * i + (sw - 3) / 2} y="30" fontSize="12.5" fontWeight="800" fill="#fff" textAnchor="middle">{s.short}</text></g>)}
+    {items.map((it, r) => { const y = top + r * rh; const cx = lx + sw * it.idx + (sw - 3) / 2; return <g key={r}>
+      <rect x="6" y={y} width={W - 12} height={rh - 6} fill={r % 2 ? "#f7f8fb" : "#fff"} stroke="#d5dae6" />
+      <text x="16" y={y + 28} fontSize="15" fontWeight="900" fill="#16203a">{it.label}</text>
+      {steps.map((s, i) => <line key={i} x1={lx + sw * i} x2={lx + sw * i} y1={y} y2={y + rh - 6} stroke="#e1e5ee" />)}
+      <rect x={lx + 3} y={y + 21} width={Math.max(6, cx - lx - 3)} height="8" fill="#33507a" opacity=".25" />
+      <circle cx={cx} cy={y + 25} r="11" fill="#16203a" stroke="#fff" strokeWidth="3" />
+      <text x={Math.min(W - 70, cx + 18)} y={y + 29} fontSize="13" fontWeight="800" fill="#16203a">{it.sub || ""}</text></g>; })}
+  </svg>);
+}
+
+/* 교과군 평균등급 막대 — 눈금 1(우수)~max, 전체 평균선 */
+export function GroupBars({ rows, max = 9, overall }) {
+  const W = 620, lx = 80, rx = 40, rh = 40, top = 30, H = top + rows.length * rh + 24; const X = v => lx + (Math.min(max, Math.max(1, v)) - 1) / (max - 1) * (W - lx - rx);
+  return (<svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: "auto", display: "block" }}>
+    {Array.from({ length: max }, (_, i) => i + 1).map(v => <g key={v}><line x1={X(v)} x2={X(v)} y1={top - 6} y2={top + rows.length * rh} stroke="#e1e5ee" /><text x={X(v)} y={top - 12} fontSize="12.5" fill="#51607e" textAnchor="middle" fontWeight="700">{v}</text></g>)}
+    {rows.map((r, i) => { const y = top + i * rh; return <g key={i}><text x="8" y={y + 25} fontSize="15" fontWeight="900" fill="#16203a">{r.label}</text>
+      {r.v != null ? <><rect x={lx} y={y + 10} width={Math.max(2, X(r.v) - lx)} height="18" fill={r.v <= 2 ? "#1f6f78" : r.v <= 3.5 ? "#4a7f9c" : "#8b94a8"} /><text x={X(r.v) + 8} y={y + 25} fontSize="14" fontWeight="900" fill="#16203a">{r.v.toFixed(2)}</text></> : <text x={lx + 6} y={y + 25} fontSize="13" fill="#8b94a8">자료 없음</text>}</g>; })}
+    {overall != null && <g><line x1={X(overall)} x2={X(overall)} y1={top - 4} y2={top + rows.length * rh} stroke="#b42d3f" strokeWidth="2" strokeDasharray="5 4" /><text x={X(overall)} y={H - 6} fontSize="13" fontWeight="900" fill="#b42d3f" textAnchor="middle">국영수사과 평균 {overall.toFixed(2)}</text></g>}
+  </svg>);
+}

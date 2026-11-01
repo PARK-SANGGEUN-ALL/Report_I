@@ -349,3 +349,41 @@ table.rp td.c,table.rp th.c{text-align:center}
 .hero-title{font-size:clamp(36px,4.5vw,68px)}
 .hero-title .ln{display:block;white-space:nowrap}
 @media(max-width:900px){.hero-title{font-size:clamp(34px,10vw,48px)}}
+
+/* ═══ v73 — 은은한 입체감 · 헤드라인 조정 · 슬라이드 패널 · 인쇄 편집 ═══ */
+:root{--sh:4px 4px 12px rgba(158,132,108,.17),-3px -3px 9px rgba(255,255,255,.72);--sh-s:2px 2px 6px rgba(158,132,108,.17),-2px -2px 5px rgba(255,255,255,.72);--sh-in:inset 2px 2px 5px rgba(158,132,108,.17),inset -2px -2px 5px rgba(255,255,255,.72);--sh2:6px 6px 16px rgba(158,132,108,.2),-4px -4px 10px rgba(255,255,255,.8)}
+.hero-title{font-size:clamp(30px,3.7vw,54px);line-height:1.18;letter-spacing:-.045em}
+.hero-title .hl{padding:0 .18em .02em;box-shadow:3px 3px 8px rgba(11,122,119,.22)}
+.emb{text-shadow:1px 1px 2px rgba(158,132,108,.28),-1px -1px 2px rgba(255,255,255,.8)}
+.cta{box-shadow:4px 4px 12px rgba(11,122,119,.3),-3px -3px 8px rgba(255,255,255,.8)}
+.demo-btn.big{box-shadow:3px 3px 10px rgba(22,41,79,.25)}
+.chapter{display:none}.chapter.on{display:block}
+.rp-slide{border:2px solid var(--rp-line);margin:22px 0;background:#fff}
+.rp-slide-h{display:flex;justify-content:space-between;align-items:center;gap:14px;color:#fff;padding:14px 22px;flex-wrap:wrap}
+.rp-slide-h b{font-size:24px;font-weight:900;margin-right:14px}.rp-slide-h span{font-size:15px;opacity:.92}
+.rp-slide-r{display:flex;gap:14px;align-items:center}.rp-slide-r em{font-style:normal;border:2px solid #fff;padding:2px 14px;font-weight:900}.rp-slide-r strong{font-size:19px}
+.rp-slide-b{display:grid;grid-template-columns:1.4fr 1fr}.rp-slide-b>div{padding:16px 22px 4px;border-right:1px solid var(--rp-grid)}.rp-slide-b>div:last-child{border-right:none}
+.rp-slide-b h6{font-size:13.5px;letter-spacing:.14em;color:#33507a;margin-bottom:6px}
+table.rp.mini{margin:0;border-left:none;border-right:none;border-bottom:none;font-size:14.5px}
+@media(max-width:900px){.rp-slide-b{grid-template-columns:1fr}.hero-title{font-size:clamp(30px,8.4vw,40px)}}
+/* ── 인쇄 ── */
+@page{size:A4;margin:14mm 12mm 16mm}
+@media print{
+  html,body{background:#fff!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .rail,.dock,.no-print,.topbar,.drawer,.mini-btn{display:none!important}
+  .shell{display:block}.main{padding:0;max-width:none}
+  .chapter{display:block!important}.chapter+.chapter{break-before:page}
+  .sheet{border:none;box-shadow:none;max-width:none;padding:0;font-size:10.5pt}
+  .rp-meta{font-size:8.5pt;margin-bottom:14px}.rp-title{font-size:21pt}.rp-lead{font-size:10.5pt}
+  .rp-sec{margin-top:22px}.rp-sec>h3{font-size:13.5pt;break-after:avoid;margin-bottom:10px}.rp-h5{font-size:11pt;break-after:avoid}
+  .rp-p{font-size:10pt;line-height:1.75;orphans:3;widows:3}.rp-sum li{font-size:10.5pt}.note{font-size:8.5pt}
+  table.rp{font-size:9pt;margin:6px 0}table.rp th{font-size:8.5pt;padding:5px 7px}table.rp td{padding:5px 8px;line-height:1.55}
+  table.rp.keep{break-inside:avoid}
+  tr,td,th,li{break-inside:avoid}thead{display:table-header-group}
+  .rp-sum,.rp-app,.rp-slide,.rp-tier,.fig,.letter,.callout,.rp-opinion,.rp-sec>h3+p{break-inside:avoid}
+  .rp-sec>h3+*{break-before:avoid}
+  .rp-app{margin:12px 0}.rp-slide{margin:12px 0}.rp-slide-h{padding:8px 14px}.rp-slide-h b{font-size:14pt}.rp-slide-b>div{padding:8px 14px 2px}
+  .dg-wrap{border-width:1px;padding:8px}.dg-svg{display:none}.dg-card{font-size:8.5pt;padding:6px 8px;margin-bottom:8px}.dg-h{font-size:8.5pt;margin-bottom:8px}
+  .lgd{font-size:8pt}.fig svg{max-width:100%;height:auto}
+  .sheet .letter{font-size:10pt}
+}

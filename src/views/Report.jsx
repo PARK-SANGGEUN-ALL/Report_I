@@ -1,8 +1,8 @@
-import React, { useState, useMemo, useRef, useLayoutEffect } from "react";
+import React, { useState, useMemo, useRef, useLayoutEffect, useEffect } from "react";
 import { rich, firstSentence, getMajorRelatedGroups, lvN, verdictTone, Depth } from "./util.jsx";
 import { compareAllUnivs, convert5To9 } from "../prediction2028.js";
-import { Radar, PositionMap, DepthBars, TierLadder, Ring, GradeBand } from "./charts.jsx";
-import { RUBRIC_TABLE, TIER_STEPS, tierOf, fitWord } from "../scoring.js";
+import { PositionMap, TierLadder, Ring, GradeBand, DepthMatrix, LevelBars, GroupBars } from "./charts.jsx";
+import { COMP_RUBRIC, OVERALL_TABLE, TIER_STEPS, tierOf, fitWord } from "../scoring.js";
 import { connectionMetrics, buildLinks } from "../connections.js";
 import { coreFitSentences } from "../coreFit.js";
 
@@ -24,6 +24,7 @@ const Doc = ({ no, title, lead, name, G, children }) => (<article className="she
   <div className="rp-chap">제 {no} 장</div><h1 className="rp-title">{title}</h1>{lead && <div className="rp-lead">{lead}</div>}{children}
   <div className="rp-foot">본 보고서는 학생부 기록과 공개 입시 자료를 바탕으로 한 참고용 진단이며, 실제 합격 여부는 대학별 평가와 면접 등에 따라 달라질 수 있습니다.</div></article>);
 const tierOfG = (G, k) => (G._tiers && G._tiers[k]) || tierOf(G.competencies?.[k]?.score, MAXES[k] || 100);
+const ns = s => String(s || "").replace(/\(?\s*\d+(?:\.\d+)?\s*\/\s*\d+\s*\)?/g, "").replace(/\d+(?:\.\d+)?\s*점(?![수])/g, "").replace(/\s{2,}/g, " ").trim();
 const probTxt = p => p && p.min != null ? `${p.min}~${p.max}%` : "-";
 const s9Of = (G, is2022) => { const g = parseFloat(G.gradeAvg); return isNaN(g) ? null : (is2022 ? convert5To9(g) : g); };
 
@@ -41,7 +42,6 @@ function GradesTab({ G, name, major }) {
   const trend = first == null ? "-" : Math.abs(diff) < 0.25 ? "안정 유지형" : diff < 0 ? "상승형" : "하락형";
   const W = 640, H = 220, px = 40, py = 34; const X = i => keys.length < 2 ? W / 2 : px + 24 + i * ((W - px - 76) / (keys.length - 1)); const Y = v => py + ((v - 1) / (maxLv - 1)) * (H - py * 2);
   const pts = series.map((v, i) => v != null ? [X(i), Y(v), v] : null).filter(Boolean);
-  const radarVals = GROUPS.map(g => { const a = avg(grades.filter(r => r.group === g)); return { label: g, value: a ? Math.max(0, (maxLv - a) / (maxLv - 1) * 100) : 0, text: a ? a.toFixed(2) : "-" }; });
   const ach = G.achievementSubjects || []; const gOf = r => GROUPS.includes(r.group) ? r.group : "기타"; const cr = G.creditStatus; const CF = G._coreFit || []; const A2 = G._ach2022;
   const s9 = s9Of(G, is2022);
   return (<Doc no="1" title="성적·이수 분석" lead={`${G.stageLabel || ""} · ${is2022 ? "2022 개정(5등급제)" : "2015 개정(9등급제)"}`} name={name} G={G}>
@@ -56,7 +56,7 @@ function GradesTab({ G, name, major }) {
         {keys.map((k, i) => <text key={k} x={X(i)} y={H - 6} fontSize="14" fill="#16203a" textAnchor="middle" fontWeight="800">{k.replace("-", "·") + "학기"}</text>)}
         <polyline fill="none" stroke="#2b3550" strokeWidth="3" strokeLinejoin="round" points={pts.map(p => p[0] + "," + p[1]).join(" ")} />
         {pts.map((p, i) => <g key={i}><circle cx={p[0]} cy={p[1]} r="6.5" fill="#fff" stroke="#2b3550" strokeWidth="3" /><text x={p[0]} y={p[1] - 13} fontSize="15" fontWeight="900" fill="#16203a" textAnchor="middle">{p[2].toFixed(2)}</text></g>)}</svg></Fig>
-        <Fig no="2" cap="교과군별 평균(바깥일수록 우수)"><Radar values={radarVals} size={300} /></Fig></div> : <div className="rp-empty">학기별 성적 데이터를 찾지 못했습니다. 파일 형식을 확인해 주세요.</div>}
+        <Fig no="2" cap="교과군별 평균등급(막대가 짧을수록 우수, 점선은 국영수사과 평균)"><GroupBars rows={GROUPS.map(g => ({ label: g, v: avg(grades.filter(r => r.group === g)) }))} max={maxLv} overall={coreAll} /></Fig></div> : <div className="rp-empty">학기별 성적 데이터를 찾지 못했습니다. 파일 형식을 확인해 주세요.</div>}
     </Sec>
     <Sec n={nx()} title="교과군 × 학기 성적표">
       {keys.length > 0 && <div className="tbl-wrap"><table className="rp"><thead><tr><th>교과군</th>{keys.map(k => <th key={k}>{k}</th>)}</tr></thead><tbody>
@@ -148,9 +148,15 @@ function LineageTab({ G, name }) {
       hasLevel ? <>내용 수준은 교과 기본 {cnt("level", "기본")}건 · 교과 심화 {cnt("level", "심화")}건 · 대학 전공 {cnt("level", "전공")}건이며, 희망 학과군 적정 수준에 부합하는 기록은 {cnt("levelFit", "적정")}건임.</> : null,
       <>종적 연결 <b>{vV}</b>, 횡적 연결 <b>{vH}</b>로 판정됨.</>, majors[0] ? <>탐구가 가장 뚜렷하게 가리키는 학과는 <b>{majors[0].major}</b>{majors[1] ? `, 다음으로 ${majors[1].major}` : ""}임.</> : null]} />
     {missing.length > 0 && <div className="callout bad"><b>기록 누락 의심 · </b>{missing.join(", ")}에 성적은 있으나 탐구 기록이 추출되지 않음. 원문에 세특이 있다면 HTML(.htm)로 다시 올리거나 파일을 확인할 필요가 있음.</div>}
-    <Sec n="2.1" title="학기별 탐구 기록과 깊이">
-      {acts.length > 0 && <Fig no="3" cap="학기별 탐구 기록 수와 깊이 분포(1단계 정리·참여 ~ 4단계 성찰·확장)"><DepthBars cols={cols} acts={acts} /></Fig>}
-      <div className="note">깊이는 «수행 방법»의 단계이고, 2.3의 수준은 «내용의 난도»임. 깊이와 수준은 원문에 남은 근거(실험·측정·설문·모델링·한계 서술 등)가 없으면 AI 판정보다 낮게 조정함.</div>
+    <Sec n="2.1" title="학기별 탐구 깊이 분포와 단계 정의">
+      <p className="rp-p">탐구 기록 한 건마다 «학생이 무엇을 직접 해냈는가»를 기준으로 1~4단계로 구분함. 아래 그림은 학기별로 기록이 몇 건이고 어느 단계에 있는지를 보여주며, 위쪽 단계에 점이 많을수록 탐구가 깊다는 뜻임. 이 단계는 수행 방법의 깊이이고, 2.3의 수준(교과 기본·심화·전공)은 내용의 난도로 서로 다른 기준임.</p>
+      {acts.length > 0 ? <Fig no="3" cap="학기별 탐구 깊이 분포 — 점의 크기와 숫자는 해당 단계의 기록 수"><DepthMatrix cols={cols} acts={acts} /></Fig> : <div className="rp-empty">탐구 기록을 추출하지 못했습니다.</div>}
+      <div className="tbl-wrap"><table className="rp keep"><thead><tr><th style={{ width: 130 }}>단계</th><th style={{ width: "26%" }}>정의</th><th style={{ width: "28%" }}>원문에서 확인되는 서술</th><th>입시에서의 의미</th></tr></thead><tbody>
+        <tr><td className="c"><b>1단계</b><br />정리·참여</td><td>수업 내용을 정리하거나 발표하고 활동에 참여한 수준</td><td>“발표함”, “참여함”, “정리함”, 소감문·감상 작성</td><td>성실성과 참여도의 근거일 뿐 탐구역량의 근거로는 약함</td></tr>
+        <tr><td className="c"><b>2단계</b><br />조사·분석</td><td>이미 있는 자료(문헌·기사·논문·도서)를 찾아 읽고 개념을 비교·분석·적용한 수준</td><td>“자료를 조사하여 비교함”, “논문을 참고해 원리를 정리함”, 독서 후 칼럼</td><td>지적 호기심과 자료 활용 능력을 보여 주는 고교 탐구의 기본선</td></tr>
+        <tr><td className="c"><b>3단계</b><br />분석·실험</td><td>학생이 직접 자료를 만들거나 분석한 수준(실험·측정·설문·면담·데이터 분석·모델링·코딩·설계 제작)</td><td>변인·측정값·표본·결과가 기록에 남아 있음</td><td>탐구역량을 인정받는 출발점이며 면접에서 과정을 직접 설명할 수 있음</td></tr>
+        <tr><td className="c"><b>4단계</b><br />성찰·확장</td><td>3단계 활동에서 한계·오차·예상과 다른 결과를 짚고 개선·재검증·후속 탐구까지 이어간 수준</td><td>“한계를 분석함”, “가설을 수정함”, “후속 탐구를 설계함”</td><td>최상위권 지원자를 가르는 변별 요소이며 서류와 면접 모두에서 강점이 됨</td></tr></tbody></table></div>
+      <div className="note">※ 깊이는 원문에 남은 근거(실험·측정·설문·모델링·한계 서술 등)가 없으면 보고된 단계보다 낮게 조정함. 한 학기에 4단계가 여러 건 나오는 경우는 과대 판정으로 보고 재점검함.</div>
     </Sec>
     <Sec n="2.2" title="탐구 계보도 — 연결선과 연결 이유">
       {acts.length ? <><p className="rp-p">같은 주제어를 공유하는 기록을 학기 순으로 선으로 이었음. 선의 색은 연결 종류(심화·확장·전환·반복)이며, 카드를 누르면 그 주제로 이어진 기록만 강조됨.</p>
@@ -183,14 +189,22 @@ function LineageTab({ G, name }) {
       {CM.isolated.length > 0 && <p className="rp-p" style={{ marginTop: 12 }}><b>줄기 밖 고립 기록 {CM.isolated.length}건 · </b>{CM.isolated.slice(0, 8).map(a => `${a.key.replace("-", "·")} ${a.subj}「${a.title}」`).join(", ")}{CM.isolated.length > 8 ? " 외" : ""}. 앞뒤 기록과 이어지지 않은 단발 활동은 전공 적합성 근거로 약하게 작용함.</p>}
       {CA.overall && <div className="rp-opinion"><h5 className="rp-h5">탐구 종합 의견</h5><p className="rp-p">{rich(CA.overall)}</p></div>}
     </Sec>
-    <Sec n="2.5" title="추천학과">
-      {majors.length ? <div className="tbl-wrap"><table className="rp"><thead><tr><th style={{ width: 54 }}>순위</th><th style={{ width: "16%" }}>추천 학과</th><th style={{ width: 90 }}>적합도</th><th>근거</th><th style={{ width: "20%" }}>관련 이수 교과</th></tr></thead><tbody>
-        {majors.slice(0, 5).map((m, i) => <tr key={i}><td className="c">{i + 1}</td><td><b>{m.major}</b></td><td className="c">{fitWord(m.score)}</td><td>{rich(String(m.reason || "").replace(/\n+/g, " "))}</td><td>{(m.matchedSubjects || []).slice(0, 6).join(", ")}</td></tr>)}</tbody></table></div> : <div className="rp-empty">추천학과 데이터가 없습니다.</div>}
+    <Sec n="2.5" title="추천학과와 근거">
+      {majors.length ? majors.slice(0, 5).map((m, i) => (<div className="rp-box" key={i}><h5 className="rp-h5">{i + 1}순위 · {m.major} <small>적합도 {fitWord(m.score)}</small></h5>
+        <div className="tbl-wrap"><table className="rp kv keep"><tbody>
+          <tr><td>추천 이유</td><td>{rich(String(m.reason || "").replace(/\n+/g, " "))}</td></tr>
+          {m.courseEvidence && <tr><td>이수 교과 근거</td><td>{rich(m.courseEvidence)}</td></tr>}
+          {m.inquiryEvidence && <tr><td>탐구 근거</td><td>{rich(m.inquiryEvidence)}</td></tr>}
+          {m.gradeEvidence && <tr><td>성적 근거</td><td>{rich(m.gradeEvidence)}</td></tr>}
+          {m.limits && <tr><td>한계</td><td>{rich(m.limits)}</td></tr>}
+          {m.nextStep && <tr><td>보완 행동</td><td>{rich(m.nextStep)}</td></tr>}
+          <tr><td>관련 이수 교과</td><td>{(m.matchedSubjects || []).slice(0, 6).join(", ") || "-"}</td></tr></tbody></table></div></div>))
+        : <div className="rp-empty">추천학과 데이터가 없습니다.</div>}
       <div className="note">※ 추천학과는 이수과목·세특·탐구 줄기를 종합한 «적합도»이며 합격 가능성이 아님. 합격 가능성은 4장에서 다룸.</div>
     </Sec>
     {selA && <aside className="drawer"><button className="mini-btn" style={{ float: "right" }} onClick={() => setSel(null)}>닫기</button>
       <div className="pg-eye">{selA.key.replace("-", "학년 ")}학기 · {selA.subj}</div><h3 style={{ fontSize: 20, margin: "4px 0 8px" }}>{selA.title}</h3>
-      <p className="rp-p"><Depth n={selA.depthN} /> 깊이 {selA.depthN}단계{selA.depthRaw && selA.depthRaw !== selA.depthN ? ` (AI 판정 ${selA.depthRaw}단계 → 원문 근거 점검 후 조정)` : ""}</p>
+      <p className="rp-p"><Depth n={selA.depthN} /> 깊이 {selA.depthN}단계{selA.depthRaw && selA.depthRaw !== selA.depthN ? ` (기재상 ${selA.depthRaw}단계 → 원문 근거 점검 후 조정)` : ""}</p>
       {selA.level && <p className="rp-p"><b>탐구 수준 · </b><LvlTag a={selA} /> {selA.levelNote}</p>}
       {(selA.methods || []).length > 0 && <p className="rp-p"><b>방법 · </b>{selA.methods.join(", ")}</p>}
       <P t={selA.content} />{selA.motivation && <p className="rp-p"><b>동기 · </b>{rich(selA.motivation)}</p>}{selA.process && <p className="rp-p"><b>과정 · </b>{rich(selA.process)}</p>}{selA.growth && <p className="rp-p"><b>성장 · </b>{rich(selA.growth)}</p>}</aside>}
@@ -205,31 +219,31 @@ function CompTab({ G, name }) {
     <Sum items={[<>5대 역량을 종합한 수준은 <b>{overall.label}</b>({overall.ex})임.{overall.lifted ? " 탐구가 우수해 교과성적 수준보다 한 단계 높게 봄." : overall.lowered ? " 탐구·진로가 약해 교과성적 수준보다 한 단계 낮게 봄." : " 교과성적(학업) 수준이 종합 수준의 기준이 됨."}</>, G.scoreSummary ? rich(G.scoreSummary) : null,
       <>가장 강한 역량은 <b>{[...lv].sort((a, b) => a.t.idx - b.t.idx)[0]?.n}</b>, 가장 보완이 필요한 역량은 <b>{[...lv].sort((a, b) => b.t.idx - a.t.idx)[0]?.n}</b>임.</>]} />
     <Sec n="3.1" title="종합 수준 판정">
-      <div className="grid split"><Fig no="4" cap="대학 그룹 수준 사다리 — 현재 위치"><TierLadder idx={overall.idx} sub={overall.sub} steps={TIER_STEPS} /></Fig>
-        <Fig no="5" cap="5대 역량의 수준 프로파일(바깥일수록 높은 수준)"><Radar values={lv.map(x => ({ label: x.n.replace("역량", ""), value: Math.max(8, 100 - x.t.idx * 18), text: x.t.short }))} size={310} /></Fig></div>
+      <div><Fig no="4" cap="대학 그룹 수준 사다리 — 현재 위치"><TierLadder idx={overall.idx} sub={overall.sub} steps={TIER_STEPS} /></Fig>
+        <Fig no="5" cap="5대 역량별 수준 — 눈금은 왼쪽(최상위)에서 오른쪽(기초 보완), 점이 현재 위치"><LevelBars steps={TIER_STEPS} items={lv.map(x => ({ label: x.n, idx: x.t.idx, sub: x.t.sub }))} /></Fig></div>
+      <h5 className="rp-h5">수준 구분 기준 — 최상위권부터 기초 보완 단계까지</h5>
+      <div className="tbl-wrap"><table className="rp keep"><thead><tr><th style={{ width: "13%" }}>수준</th><th style={{ width: "20%" }}>해당 대학군</th><th style={{ width: "22%" }}>교과성적·탐구 조건</th><th>판정 원칙과 현실</th></tr></thead><tbody>
+        {OVERALL_TABLE.map((r, i) => <tr key={i} style={i === overall.idx ? { background: "#e6eaf2" } : {}}><td className="c"><b>{r[0]}</b>{i === overall.idx && <div className="note">현재 위치</div>}</td><td>{r[1]}</td><td>{r[2]}</td><td>{r[3]}</td></tr>)}</tbody></table></div>
+      <div className="note">※ 종합 수준은 교과성적(학업)이 천장이며, 탐구·진로가 매우 우수할 때만 한 단계 상향하고 약하면 한 단계 하향함. 사례가 있다는 사실만으로 합격이 보장되지 않으므로 기준은 보수적으로 적용함.</div>
     </Sec>
     <Sec n="3.2" title="역량별 수준과 근거">
       <div className="tbl-wrap"><table className="rp"><thead><tr><th style={{ width: "13%" }}>역량</th><th style={{ width: "14%" }}>수준</th><th>플러스(＋) 근거</th><th>마이너스(－) 근거</th></tr></thead><tbody>
         {lv.map(x => { const b = x.d.scoreBreakdown || {}; return <tr key={x.k}><td><b>{x.n}</b></td><td className="c"><b>{x.t.shortLabel}</b>{x.k === "career" && (G._coreFit || [])[0]?.found && (G._coreFit || [])[0].core.rate != null && <div className="note">핵심과목 충족 {(G._coreFit || [])[0].core.rate}%</div>}</td>
-          <td><ul className="rp-ul g">{(b.plusFactors || []).map((p, i) => <li key={i}>{rich(p.reason)}</li>)}</ul></td>
-          <td><ul className="rp-ul r">{(b.minusFactors || []).map((p, i) => <li key={i}>{rich(p.reason)}</li>)}{!(b.minusFactors || []).length && <li className="none">확인된 감점 요인 없음</li>}</ul></td></tr>; })}</tbody></table></div>
+          <td><ul className="rp-ul g">{(b.plusFactors || []).map((p, i) => <li key={i}>{rich(ns(p.reason))}</li>)}</ul></td>
+          <td><ul className="rp-ul r">{(b.minusFactors || []).map((p, i) => <li key={i}>{rich(ns(p.reason))}</li>)}{!(b.minusFactors || []).length && <li className="none">확인된 감점 요인 없음</li>}</ul></td></tr>; })}</tbody></table></div>
     </Sec>
     <Sec n="3.3" title="역량별 해설">
-      {lv.map(x => { const b = x.d.scoreBreakdown || {}; return (<div key={x.k} className="rp-item"><h5 className="rp-h5">{x.n} — {x.t.label}{b.final ? <small> · {rich(b.final)}</small> : null}</h5>
-        <P t={x.d.detail} />{(x.d.evidenceList || []).length > 0 && <ul className="rp-quote">{x.d.evidenceList.slice(0, 3).map((e, i) => <li key={i}>{rich(e)}</li>)}</ul>}</div>); })}
+      {lv.map(x => { const b = x.d.scoreBreakdown || {}; return (<div key={x.k} className="rp-item"><h5 className="rp-h5">{x.n} — {x.t.label}</h5>
+        <P t={ns(x.d.detail)} />{(x.d.evidenceList || []).length > 0 && <ul className="rp-quote">{x.d.evidenceList.slice(0, 3).map((e, i) => <li key={i}>{rich(ns(e))}</li>)}</ul>}</div>); })}
     </Sec>
-    <Sec n="3.4" title="산정 근거 — 코드가 직접 센 항목">
-      <p className="rp-p">학업역량·탐구역량·진로역량은 AI의 인상이 아니라 아래 항목을 코드가 세어 기본 수준을 정하고, AI는 그 범위 안에서만 보정함. 같은 학생부는 항상 같은 기본 수준이 나옴.</p>
-      <div className="grid g2">{["academic", "inquiry", "career"].map(k => comps[k]?.quant ? (<div key={k} className="rp-box"><h5 className="rp-h5">{k === "academic" ? "학업역량" : k === "inquiry" ? "탐구역량" : "진로역량(관련 교과 이수·핵심과목 충족률 반영)"}</h5>
-        <ul className="rp-ul">{comps[k].quant.rows.map((r, i) => <li key={i} className={i > 0 && r.pts > 0 ? "g" : r.pts < 0 ? "r" : ""}>{i === 0 ? "기준 · " : r.pts > 0 ? "가산 · " : r.pts < 0 ? "감산 · " : "참고 · "}{r.label}</li>)}{(comps[k].quant.caps || []).map((x, i) => <li key={"c" + i} className="r">상한 · {x}</li>)}</ul>
-        <div className="note">{k === "career" ? "AI가 판단한 진로역량에 전공 관련 교과 이수 현황과 핵심과목 충족률을 코드가 가감 반영함." : "AI 판단은 이 기준 수준에서 한 단계 이내로만 반영됨."}</div></div>) : null)}</div>
+    <Sec n="3.4" title="역량별 수준 판정 기준표">
+      <p className="rp-p">각 역량을 아래 기준으로 6단계로 판정함. 정량 조건과 정성 조건을 모두 충족해야 해당 수준으로 인정하며, 한쪽만 충족하면 한 단계 낮은 수준으로 봄. 현재 위치는 음영으로 표시함.</p>
+      {COMP_RUBRIC.map(r => { const cur = tierOfG(G, r.key).idx; return (<div key={r.key} style={{ marginBottom: 18 }}><h5 className="rp-h5">{r.name} <small>— {r.basis}</small></h5>
+        <div className="tbl-wrap"><table className="rp keep"><thead><tr><th style={{ width: "16%" }}>수준</th><th style={{ width: "36%" }}>정량 조건</th><th>정성 조건</th></tr></thead><tbody>
+          {r.rows.map((x, i) => <tr key={i} style={i === cur ? { background: "#e6eaf2" } : {}}><td className="c"><b>{x[0]}</b>{i === cur && <div className="note">현재</div>}</td><td>{x[1]}</td><td>{x[2]}</td></tr>)}</tbody></table></div></div>); })}
+      <div className="note">※ 대학 그룹은 합격선 지도와 같은 구분(최상위권·상위권·중상위권·중위권·거점국립대)을 따름. 학종 평가는 대학·전형·학과마다 다르므로 «참고 수준»임.</div>
     </Sec>
-    <Sec n="3.5" title="수준 판정 기준표">
-      <div className="tbl-wrap"><table className="rp"><thead><tr><th style={{ width: "13%" }}>역량</th><th style={{ width: "32%" }}>산정 방식</th><th>수준 기준</th></tr></thead><tbody>
-        {RUBRIC_TABLE.map(r => <tr key={r.key}><td><b>{r.name}</b><div className="note">현재 {tierOfG(G, r.key).shortLabel}</div></td><td>{r.how}</td><td><ul className="rp-ul">{r.bands.map((b, i) => <li key={i}><b>{b[0]}</b> — {b[1]}</li>)}</ul></td></tr>)}</tbody></table></div>
-      <div className="note">※ 학업역량은 교과성적(평균등급)이 종합 수준의 천장 역할을 하며, 탐구가 매우 우수할 때만 한 단계 상향함. 학종 평가는 대학·전형·학과마다 다르므로 «참고 수준»임.</div>
-    </Sec>
-    <Sec n="3.6" title="강점과 보완점">
+    <Sec n="3.5" title="강점과 보완점">
       <div className="grid g2"><div className="rp-box g"><h5 className="rp-h5">강점</h5>{S.length ? <ul className="rp-ul">{S.map((s, i) => <li key={i}><b>{s.title}</b> — {rich(String(s.content || "").replace(/\n+/g, " "))}{s.highlight && <div className="note">입시에서의 의미: {rich(s.highlight)}</div>}</li>)}</ul> : <div className="note">없음</div>}</div>
         <div className="rp-box r"><h5 className="rp-h5">보완점</h5>{W.length ? <ul className="rp-ul">{W.map((s, i) => <li key={i}><b>{s.title}</b> — {rich(String(s.content || "").replace(/\n+/g, " "))}{s.suggestion && <div className="note">보완 방법: {rich(s.suggestion)}</div>}</li>)}</ul> : <div className="note">없음</div>}</div></div>
     </Sec>
@@ -253,17 +267,20 @@ function DiagTab({ G, name, major }) {
       is2022 && s9Of(G, true) ? <>2022 개정(5등급제) 평균 {G.gradeAvg}등급은 9등급제 환산 약 {s9Of(G, true).toFixed(2)}등급으로 입결과 비교함.</> : null]} />
     <div className="callout warn"><b>읽는 법 · </b>합격가능성은 서류 기준의 <b>보수적 추정치</b>임. 면접이 있는 전형은 결과에 따라 크게 달라질 수 있고, 인용된 합격선에는 특목·자사고 지원자도 섞여 있어 일반고 학생에게는 더 엄격하게 봐야 함. 합격 사례가 있다는 사실만으로 합격이 보장되지 않음.</div>
     <Sec n="4.1" title="희망학과 분석">
-      {dept.length ? dept.map((d, i) => { const gv = d.gradeView || d.gradeAnalysis?.trend, mv = d.majorGradeView || d.gradeAnalysis?.relatedSubjects, iv = d.inquiryView || d.activityFit?.detail, op = d.opinion || d.letter;
-        const f = (G._coreFit || []).find(x => x.univ === d.univ && x.dept === d.dept);
+      {dept.length ? dept.map((d, i) => { const gv = d.gradeView || d.gradeAnalysis?.trend, mv = d.majorGradeView || d.gradeAnalysis?.relatedSubjects, op = d.opinion || d.letter; const cu = d._cut;
+        const f = (G._coreFit || []).find(x => x.univ === d.univ && x.dept === d.dept); const hasSplit = d.inquiryLevel || d.inquiryVertical || d.inquiryHorizontal || d.inquiryVsUniv;
         return (<div className="rp-box" key={i}><h5 className="rp-h5">{d.rank || i + 1}순위 · {d.univ} {d.dept}</h5>
         <div className="tbl-wrap"><table className="rp kv"><tbody>
           <tr><td>종합 판정</td><td><b>{d.overall?.verdict}</b> — {rich(d.overall?.summary)}</td></tr>
           {d.univProfile && <tr><td>지원 대학 특성</td><td>{rich(d.univProfile)}</td></tr>}
           {gv && <tr><td>교과 성적</td><td>{rich(gv)}</td></tr>}{mv && <tr><td>학과 관련 성적</td><td>{rich(mv)}</td></tr>}
           {f?.found && <tr><td>핵심·권장과목 이수</td><td>핵심 {f.core.rate == null ? (f.core.free ? "자유 선택" : "지정 없음") : <b>{f.core.rate}% ({f.core.items.filter(x => x.status !== "no").length}/{f.core.items.length})</b>} · 권장 {f.rec.rate == null ? "지정 없음" : <b>{f.rec.rate}%</b>}{f.core.items.some(x => x.status === "no") && <> — 미이수 핵심: {f.core.items.filter(x => x.status === "no").map(x => x.name).join(", ")}</>}</td></tr>}
-          {iv && <tr><td>탐구 수준·연결</td><td>{rich(iv)}</td></tr>}</tbody></table></div>
-        {(d.qualGaps || []).length > 0 && <><h5 className="rp-h5">정성 평가 — 부족한 부분과 보완 방향</h5><div className="tbl-wrap"><table className="rp"><thead><tr><th style={{ width: 130 }}>영역</th><th>부족한 점</th><th style={{ width: "34%" }}>보완 방향</th></tr></thead><tbody>
-          {d.qualGaps.map((g, j) => <tr key={j}><td className="c"><b>{g.area}</b></td><td>{rich(g.gap)}</td><td>{rich(g.fix)}</td></tr>)}</tbody></table></div></>}
+          {hasSplit ? <>{d.inquiryLevel && <tr><td>탐구 수준</td><td>{rich(d.inquiryLevel)}</td></tr>}{d.inquiryVertical && <tr><td>종적 연결</td><td>{rich(d.inquiryVertical)}</td></tr>}{d.inquiryHorizontal && <tr><td>횡적 연결</td><td>{rich(d.inquiryHorizontal)}</td></tr>}{d.inquiryVsUniv && <tr><td>이 대학 평가 요소 대비</td><td>{rich(d.inquiryVsUniv)}</td></tr>}</>
+            : (d.inquiryView || d.activityFit?.detail) && <tr><td>탐구 수준·연결</td><td>{rich(d.inquiryView || d.activityFit?.detail)}</td></tr>}</tbody></table></div>
+        {cu && cu.lines?.length > 0 && <><h5 className="rp-h5">학과별 최근 입결 <small>— {cu.basis}</small></h5><div className="tbl-wrap"><table className="rp"><thead><tr><th>전형</th><th>학년도</th><th>50%컷</th><th>70%컷</th><th>모집</th><th>경쟁률</th><th>충원율</th></tr></thead><tbody>
+          {cu.lines.flatMap((ln, li) => [...ln.years].reverse().map((y, yi) => <tr key={li + "-" + yi}>{yi === 0 && <td rowSpan={ln.years.length}><b>{ln.jh}</b><div className="note">{ln.dept}</div></td>}<td className="c">{y.y}</td><td className="c">{y.c50 != null ? y.c50.toFixed(2) : "-"}</td><td className="c">{y.c70 != null ? y.c70.toFixed(2) : "-"}</td><td className="c">{y.recruit ?? "-"}</td><td className="c">{y.comp != null ? y.comp.toFixed(1) + ":1" : "-"}</td><td className="c">{y.add != null ? Math.round(y.add) + "%" : "-"}</td></tr>))}</tbody></table></div><div className="note">※ 9등급제 기준 입결이며 특목·자사고 지원자가 섞여 있음. 2022 개정 학생은 5등급 평균을 9등급으로 환산해 비교함.</div></>}
+        {(d.qualGaps || []).length > 0 && <><h5 className="rp-h5">정성 평가 — 부족한 부분과 보완 방향</h5><div className="tbl-wrap"><table className="rp"><thead><tr><th style={{ width: 120 }}>영역</th><th style={{ width: "30%" }}>부족한 점</th><th style={{ width: "20%" }}>근거 기록</th><th>보완 방향(무엇을·언제·어떻게)</th><th style={{ width: 64 }}>우선순위</th></tr></thead><tbody>
+          {d.qualGaps.map((g, j) => <tr key={j}><td className="c"><b>{g.area}</b></td><td>{rich(g.gap)}</td><td>{g.evidence ? rich(g.evidence) : <span className="note">-</span>}</td><td>{rich(g.fix)}</td><td className="c">{g.priority || "-"}</td></tr>)}</tbody></table></div></>}
         <div className="grid g2" style={{ marginTop: 8 }}><div><h5 className="rp-h5">유리한 점</h5><ul className="rp-ul g">{(d.pros || []).map((x, j) => <li key={j}>{rich(x)}</li>)}</ul></div><div><h5 className="rp-h5">불리한 점</h5><ul className="rp-ul r">{(d.cons || []).map((x, j) => <li key={j}>{rich(x)}</li>)}</ul></div></div>
         {(d.strategy?.전형추천 || (d.strategy?.key3 || []).length > 0) && <p className="rp-p"><b>추천 전형 · </b>{d.strategy?.전형추천}{(d.strategy?.key3 || []).length > 0 && <> <b style={{ marginLeft: 10 }}>핵심 보완 · </b>{d.strategy.key3.map((x, j) => `${j + 1}) ${x}`).join("  ")}</>}</p>}
         {op && <div className="rp-opinion"><h5 className="rp-h5">종합 의견</h5><p className="rp-p">{rich(String(op).replace(/\n+/g, " "))}</p></div>}
@@ -273,10 +290,14 @@ function DiagTab({ G, name, major }) {
     <Sec n="4.2" title="대학 유불리 비교">
       {T.studentLevel && <p className="rp-p"><b>현재 위치 · </b>{rich(T.studentLevel)}</p>}
       {cmp && <Fig no="6" cap="티어별 참고 합격선(특목·자사고가 섞인 평균)과 내 평균등급(9등급제 기준) — 점 위에 올리면 대학명이 보임"><PositionMap tiers={cmp.filter(t => !/교대/.test(t.tier))} student={parseFloat(G.gradeAvg) || null} is5={is2022} /></Fig>}
-      {(cmp || []).map((tier, ti) => { const ta = (T.tiers || []).find(t => t.tier === tier.tier); return (<div className="rp-tier" key={ti} style={{ borderLeftColor: tier.color }}>
-        <div className="rp-tier-h"><b style={{ color: tier.color }}>{tier.tier}</b><span className="note">{tier.desc}</span>{ta && <span className="tag">{ta.verdict}</span>}{ta?.admissionProbability?.min != null && <span style={{ marginLeft: "auto", fontWeight: 900, fontSize: 18 }}>추정 합격가능성 {probTxt(ta.admissionProbability)}</span>}</div>
-        {ta?.reason && <P t={ta.reason} />}{ta?.strategy && <p className="rp-p"><b>전형·전략 · </b>{rich(ta.strategy)}</p>}
-        <div className="note" style={{ marginTop: 6 }}>해당 대학(참고컷): {tier.univs.map(u => `${u.name}${!u.artsNote ? " " + (u.cutShow || u.cut) : "(실기)"}`).join(" · ")}</div></div>); })}
+      {(cmp || []).map((tier, ti) => { const ta = (T.tiers || []).find(t => t.tier === tier.tier); const us = tier.univs.filter(u => !u.artsNote); const rowsU = []; for (let k = 0; k < us.length; k += 4) rowsU.push(us.slice(k, k + 4));
+        return (<div className="rp-slide" key={ti}>
+          <div className="rp-slide-h" style={{ background: tier.color }}><div><b>{tier.tier}</b><span>{tier.desc}</span></div><div className="rp-slide-r">{ta && <em>{ta.verdict}</em>}{ta?.admissionProbability?.min != null && <strong>추정 합격가능성 {probTxt(ta.admissionProbability)}</strong>}</div></div>
+          <div className="rp-slide-b">
+            <div><h6>판단 근거</h6>{ta?.reason ? <P t={ta.reason} /> : <p className="rp-p note">이 구간은 세부 판정 없이 참고컷만 제공함.</p>}</div>
+            <div><h6>전형·전략</h6>{ta?.strategy ? <p className="rp-p">{rich(ta.strategy)}</p> : <p className="rp-p note">-</p>}</div></div>
+          {rowsU.length > 0 && <table className="rp mini"><thead><tr>{[0, 1, 2, 3].map(k => <React.Fragment key={k}><th>대학</th><th style={{ width: 58 }}>참고컷</th></React.Fragment>)}</tr></thead><tbody>{rowsU.map((r, ri) => <tr key={ri}>{[0, 1, 2, 3].map(k => r[k] ? <React.Fragment key={k}><td>{r[k].name}</td><td className="c">{r[k].cutShow || r[k].cut}</td></React.Fragment> : <React.Fragment key={k}><td /><td /></React.Fragment>)}</tr>)}</tbody></table>}
+        </div>); })}
     </Sec>
     <Sec n="4.3" title="지원 검토 순서(추천 순위)">
       {ranks.length ? <div className="tbl-wrap"><table className="rp"><thead><tr><th style={{ width: 54 }}>순위</th><th style={{ width: "16%" }}>대학·학과</th><th style={{ width: 74 }}>판정</th><th style={{ width: 120 }}>추정 합격가능성</th><th>근거</th></tr></thead><tbody>
@@ -321,13 +342,14 @@ function FinalTab({ G, name, onExport }) {
       {G.summaryLetter ? <div className="letter">{rich(G.summaryLetter)}</div> : <div className="rp-empty">편지 데이터가 없습니다.</div>}
       {G.reportLetter && <details><summary>상세 상담 편지 전문</summary><div className="letter" style={{ marginTop: 10 }}>{rich(G.reportLetter)}</div></details>}
     </Sec>
-    <div className="no-print" style={{ display: "flex", gap: 8, marginTop: 24 }}><button className="mini-btn" onClick={() => window.print()}>인쇄 / PDF 저장</button><button className="mini-btn" onClick={onExport}>워드(.doc) 내보내기</button></div>
+    <div className="no-print" style={{ display: "flex", gap: 8, marginTop: 24 }}><button className="mini-btn" onClick={() => window.print()}>전체 인쇄 / PDF 저장</button><button className="mini-btn" onClick={onExport}>워드(.doc) 내보내기</button></div>
   </Doc>);
 }
 
 export default function Report({ G, name, total, grd, inMajor, onReset, onExport }) {
   const [tab, setTab] = useState(0); const go = i => { setTab(i); window.scrollTo({ top: 0 }); }; const overall = tierOfG(G, "overall");
-  const body = [<GradesTab G={G} name={name} major={inMajor} />, <LineageTab G={G} name={name} />, <CompTab G={G} name={name} />, <DiagTab G={G} name={name} major={inMajor} />, <FinalTab G={G} name={name} onExport={onExport} />][tab];
+  const bodies = [<GradesTab G={G} name={name} major={inMajor} />, <LineageTab G={G} name={name} />, <CompTab G={G} name={name} />, <DiagTab G={G} name={name} major={inMajor} />, <FinalTab G={G} name={name} onExport={onExport} />];
+  useEffect(() => { const open = () => document.querySelectorAll("details").forEach(d => { d.open = true; }); window.addEventListener("beforeprint", open); return () => window.removeEventListener("beforeprint", open); }, []);
   return (<div className="shell">
     <aside className="rail">
       <div className="logo-pill"><span className="brand-dot">RI</span>리포트아이</div>
@@ -335,7 +357,7 @@ export default function Report({ G, name, total, grd, inMajor, onReset, onExport
       <nav className="nav">{TABS.map((t, i) => <button key={i} className={tab === i ? "on" : ""} onClick={() => go(i)}><b>{i + 1}</b>{t}</button>)}</nav>
       <div className="rail-foot no-print"><button className="mini-btn" onClick={onExport}>워드로 저장</button><button className="mini-btn" onClick={() => window.print()}>인쇄</button><button className="mini-btn" onClick={onReset}>새 분석</button></div>
     </aside>
-    <main className="main">{body}</main>
+    <main className="main">{bodies.map((b, i) => <div key={i} className={`chapter${tab === i ? " on" : ""}`}>{b}</div>)}</main>
     <nav className="dock">{TABS.map((t, i) => <button key={i} className={tab === i ? "on" : ""} onClick={() => go(i)}><b>{i + 1}</b>{["성적", "계보", "역량", "입시", "종합"][i]}</button>)}</nav>
   </div>);
 }

@@ -102,11 +102,12 @@ export function cutInfoFor(univ, dept, admissionType) {
   const stem = s => String(s).replace(/\s/g, "").replace(/(학과|학부|전공|과)$/, "");
   let rows = DEPT.filter(r => ks.has(r[0]) && r[1] === want && (stem(r[3]) === stem(d) || (stem(d).length >= 2 && stem(r[3]).startsWith(stem(d))) || (stem(r[3]).length >= 2 && stem(d).startsWith(stem(r[3])))));
   let basis = "학과 일치";
+  if (!rows.length) { rows = DEPT.filter(r => ks.has(r[0]) && (stem(r[3]) === stem(d) || (stem(d).length >= 2 && stem(r[3]).startsWith(stem(d))) || (stem(r[3]).length >= 2 && stem(d).startsWith(stem(r[3]))))); if (rows.length) basis = "학과 일치(다른 전형 유형 입결)"; }
   if (!rows.length) { rows = DEPT.filter(r => ks.has(r[0]) && r[1] === want); basis = "대학 평균(학과 입결 없음)"; }
   if (!rows.length) return null;
   const nm = ws(admissionType); rows.sort((a, b) => (nm.includes(String(b[2]).slice(0, 3)) ? 1 : 0) - (nm.includes(String(a[2]).slice(0, 3)) ? 1 : 0));
-  const pick = rows.slice(0, basis === "학과 일치" ? 3 : 40);
+  const pick = rows.slice(0, basis.startsWith("학과 일치") ? 4 : 40);
   const latest = pick.map(r => r[5][r[5].length - 1]).filter(Boolean); const yr = Math.max(...latest.map(y => y[0])); const cur = latest.filter(y => y[0] === yr);
-  const lines = basis === "학과 일치" ? pick.map(r => ({ jh: r[2], dept: r[3], years: r[5].map(y => ({ y: y[0], c70: y[1], c50: y[2], recruit: y[3], comp: y[4], add: y[5] })) })) : [];
+  const lines = basis.startsWith("학과 일치") ? pick.map(r => ({ jh: r[2], dept: r[3], years: r[5].map(y => ({ y: y[0], c70: y[1], c50: y[2], recruit: y[3], comp: y[4], add: y[5] })) })) : [];
   return { basis, year: yr, c50: med(cur.map(y => y[2])), c70: med(cur.map(y => y[1])), lo: Math.min(...cur.map(y => y[2] ?? y[1]).filter(x => x != null)), hi: Math.max(...cur.map(y => y[1] ?? y[2]).filter(x => x != null)), comp: med(cur.map(y => y[4])), add: med(cur.map(y => y[5])), n: cur.length, lines };
 }
