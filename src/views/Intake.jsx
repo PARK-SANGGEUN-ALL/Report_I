@@ -9,14 +9,14 @@ const PRIORITY=["서울대","연세대","고려대","성균관대","서강대","
 function Select({value,placeholder,options,onPick,disabled,freeLabel}){
   const [open,setOpen]=useState(false); const [q,setQ]=useState(""); const ref=useRef();
   useEffect(()=>{ if(!open) return; const h=e=>{ if(ref.current&&!ref.current.contains(e.target)) setOpen(false); }; document.addEventListener("mousedown",h); return ()=>document.removeEventListener("mousedown",h); },[open]);
-  const list=useMemo(()=>{ const s=q.replace(/\s/g,""); const r=s?options.filter(o=>o.replace(/\s/g,"").includes(s)):options; return r.slice(0,150); },[q,options]);
+  const list=useMemo(()=>{ const s=q.replace(/\s/g,""); const lab=o=>typeof o==="string"?o:o.l; const r=s?options.filter(o=>lab(o).replace(/\s/g,"").includes(s)):options; return r.slice(0,150); },[q,options]);
   const pick=v=>{ onPick(v); setOpen(false); setQ(""); };
   return (<div className="sel" ref={ref}>
     <button type="button" className={`sel-btn${value?" has":""}`} disabled={disabled} onClick={()=>setOpen(!open)}><span>{value||placeholder}</span></button>
     {open&&<div className="sel-pop">
-      <input autoFocus value={q} onChange={e=>setQ(e.target.value)} placeholder="검색…" onKeyDown={e=>{ if(e.key==="Enter"){ if(list[0]) pick(list[0]); else if(freeLabel&&q.trim()) pick(q.trim()); } }}/>
+      <input autoFocus value={q} onChange={e=>setQ(e.target.value)} placeholder="검색…" onKeyDown={e=>{ if(e.key==="Enter"){ if(list[0]) pick(typeof list[0]==="string"?list[0]:list[0].v); else if(freeLabel&&q.trim()) pick(q.trim()); } }}/>
       <div className="sel-list">
-        {list.map(o=><button type="button" key={o} className="sel-opt" onClick={()=>pick(o)}>{o}</button>)}
+        {list.map(o=>{ const v=typeof o==="string"?o:o.v, l=typeof o==="string"?o:o.l; return <button type="button" key={v} className="sel-opt" onClick={()=>pick(v)}>{l}{typeof o!=="string"&&o.s&&<small>{o.s}</small>}</button>; })}
         {!list.length&&freeLabel&&q.trim()&&<button type="button" className="sel-opt" onClick={()=>pick(q.trim())}>“{q.trim()}” {freeLabel}</button>}
         {!list.length&&!(freeLabel&&q.trim())&&<div className="note" style={{padding:10}}>결과가 없어요</div>}
       </div></div>}
@@ -24,12 +24,18 @@ function Select({value,placeholder,options,onPick,disabled,freeLabel}){
 }
 
 export default function Intake(p){
-  const [univ,setUniv]=useState("");
+  const [univ,setUniv]=useState(""); const [dept,setDept]=useState(""); const [ipsi,setIpsi]=useState(null);
+  useEffect(()=>{ if(dept&&!ipsi) import("../data/ipsi2028.json").then(m=>setIpsi(m.default||m)).catch(()=>{}); },[dept,ipsi]);
   const deptMap=useMemo(()=>{ const m={}; Object.entries(UNIV_DEPTS_JSON).forEach(([u,ds])=>{m[u]=new Set(ds);});
     Object.entries(UNIV_RECOMMENDED_2028||{}).forEach(([u,arr])=>{ const k=m[u]?u:(Object.keys(m).find(x=>x.startsWith(u))||u); (m[k]=m[k]||new Set()); (arr||[]).forEach(r=>r.dept&&m[k].add(r.dept)); });
     return m; },[]);
   const univList=useMemo(()=>{ const all=Object.keys(deptMap); const pri=PRIORITY.filter(x=>all.includes(x)); return [...pri,...all.filter(x=>!pri.includes(x)).sort((a,b)=>a.localeCompare(b,"ko"))]; },[deptMap]);
   const deptList=useMemo(()=>univ&&deptMap[univ]?[...deptMap[univ]].sort((a,b)=>a.localeCompare(b,"ko")):[],[univ,deptMap]);
+  const typeOpts=useMemo(()=>{ if(!ipsi||!univ||!dept) return []; const base=univ.replace(/[\(（].*?[\)）]/g,""); const keys=Object.keys(ipsi).filter(k=>k===univ||k.startsWith(base)&&(k===base||k.startsWith(univ.split("(")[0]+"(")||k===univ)); const ks=keys.length?keys:Object.keys(ipsi).filter(k=>k===base);
+    const stem=s=>String(s).replace(/\s/g,"").replace(/(학과|학부|전공|과)$/,""); const d=stem(dept); const out=[];
+    ks.forEach(k=>(ipsi[k]||[]).filter(e=>e.tm!=="정시"&&["종합","교과","논술"].includes(e.ty)).forEach(e=>{ let n=null; Object.entries(e.un||{}).forEach(([u,v])=>{ const s=stem(u.replace(/^.*:/,"")); if(s&&d&&(s===d||s.startsWith(d)||d.startsWith(s))) n=(n||0)+v; });
+      if(n!=null) out.push({v:e.nm,l:`${e.ty} · ${e.nm}`,s:`${e.in||""} ${n}명 · ${e.iv?"면접 포함":"면접 없음"} · ${e.mn?"수능최저 있음":"수능최저 없음"}`,ty:e.ty}); }));
+    out.sort((a,b)=>(a.ty==="종합"?0:1)-(b.ty==="종합"?0:1)); const seen=new Set(); return out.filter(o=>!seen.has(o.v)&&seen.add(o.v)); },[ipsi,univ,dept]);
   const full=p.targets.filter(t=>t.u).length>=3; const ready=!!(p.pdfB64||p.htmlContent);
   return (<>
   <header className="topbar">
@@ -74,11 +80,14 @@ export default function Intake(p){
 
       <div className="f-block">
         <div className="f-label"><i>3</i>지원 희망 대학·학과<small>선택 · 최대 3개</small></div>
-        {p.targets.filter(t=>t.u).length>0&&<div className="chips">{p.targets.map((t,i)=>t.u?<span key={i} className="target-chip"><i>{i+1}</i>{t.u} {t.d}<button onClick={()=>p.removeTarget(i)} aria-label="삭제">✕</button></span>:null)}</div>}
-        {!full&&<div className="dd-row">
-          <Select value={univ} placeholder="대학 선택" options={univList} onPick={u=>setUniv(u)} freeLabel="직접 입력"/>
-          <Select value="" placeholder={univ?"학과 선택":"먼저 대학을 선택"} options={deptList} disabled={!univ} freeLabel="직접 입력" onPick={d=>{p.addTarget(univ,d);setUniv("");}}/>
-        </div>}
+        {p.targets.filter(t=>t.u).length>0&&<div className="chips">{p.targets.map((t,i)=>t.u?<span key={i} className="target-chip"><i>{i+1}</i>{t.u} {t.d}{t.t?` · ${t.t}`:""}<button onClick={()=>p.removeTarget(i)} aria-label="삭제">✕</button></span>:null)}</div>}
+        {!full&&<><div className="dd-row">
+          <Select value={univ} placeholder="대학 선택" options={univList} onPick={u=>{setUniv(u);setDept("");}} freeLabel="직접 입력"/>
+          <Select value={dept} placeholder={univ?"학과 선택":"먼저 대학을 선택"} options={deptList} disabled={!univ} freeLabel="직접 입력" onPick={d=>setDept(d)}/>
+        </div>
+        <Select value="" placeholder={dept?(typeOpts.length?"지원 전형 선택 (학생부종합 우선 표시)":"전형 목록 불러오는 중… / 해당 학과 모집 전형 없음"):"학과를 먼저 선택"} options={[{v:"__none__",l:"전형 미정 — 학생부종합 전반으로 분석"},...typeOpts]} disabled={!dept} freeLabel="직접 입력"
+          onPick={t=>{p.addTarget(univ,dept,t==="__none__"?"":t);setUniv("");setDept("");}}/>
+        <div className="note">대학 → 학과 → 전형 순서로 고르면 한 건이 추가됩니다. 같은 대학·학과에 전형을 다르게 여러 건 넣을 수 있습니다.</div></>}
         <input className="inp" value={p.inMajor} onChange={e=>p.setInMajor(e.target.value)} placeholder="대학이 미정이면 희망 전공만 입력 (예: 사학과)" autoComplete="off"/>
       </div>
 

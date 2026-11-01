@@ -99,3 +99,29 @@ export function TierLadder({ idx, sub, steps }) {
       <b>{t.short}</b>{i === idx && sub ? <em>{sub}</em> : null}</div>))}
     <div className="ladder-ex">{steps[idx]?.ex}</div></div>);
 }
+
+/* 도넛 링 — 이수 충족률 */
+export function Ring({ pct, label, sub, color = "#0f9a90", size = 124 }) {
+  const r = 44, circ = 2 * Math.PI * r, has = pct != null; const dash = has ? Math.max(0, Math.min(100, pct)) / 100 * circ : 0;
+  const col = !has ? "#cdbfae" : pct >= 90 ? "#2f9e6f" : pct >= 70 ? color : pct >= 50 ? "#f0a931" : "#d2495a";
+  return (<div style={{ textAlign: "center", width: size }}><svg viewBox="0 0 110 110" style={{ width: size, height: size }}>
+    <circle cx="55" cy="55" r={r} fill="none" stroke="#eadfce" strokeWidth="11" />
+    <circle cx="55" cy="55" r={r} fill="none" stroke={col} strokeWidth="11" strokeLinecap="round" strokeDasharray={`${dash} ${circ}`} transform="rotate(-90 55 55)" />
+    <text x="55" y={has ? 58 : 60} fontSize={has ? 25 : 14} fontWeight="900" fill="#14203f" textAnchor="middle" fontFamily="DM Mono,monospace">{has ? pct + "%" : "지정 없음"}</text></svg>
+    <div style={{ fontSize: 13, fontWeight: 900, marginTop: -4 }}>{label}</div><div style={{ fontSize: 11.5, color: "#8b8478" }}>{sub}</div></div>);
+}
+
+/* 합격 등급 범위 막대 — 50%컷~70%컷 구간과 내 평균등급 위치 (보고서용 선명한 표현) */
+export function GradeBand({ c50, c70, lo, hi, student, max = 9 }) {
+  const W = 560, H = 78, px = 18, rx = W - 18; const X = v => px + (Math.min(max, Math.max(1, v)) - 1) / (max - 1) * (rx - px);
+  const a = c50 != null ? X(c50) : null, b = c70 != null ? X(c70) : null;
+  return (<svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", maxWidth: 640, height: "auto", display: "block" }}>
+    <line x1={px} x2={rx} y1="40" y2="40" stroke="#14203f" strokeWidth="1.5" />
+    {Array.from({ length: max }, (_, i) => i + 1).map(v => <g key={v}><line x1={X(v)} x2={X(v)} y1="35" y2="45" stroke="#14203f" /><text x={X(v)} y="62" fontSize="12" fill="#44506b" textAnchor="middle" fontWeight="700">{v}</text></g>)}
+    {lo != null && hi != null && <line x1={X(lo)} x2={X(hi)} y1="40" y2="40" stroke="#7a859c" strokeWidth="5" strokeLinecap="butt" opacity=".55" />}
+    {a != null && b != null && <rect x={Math.min(a, b)} y="28" width={Math.max(3, Math.abs(b - a))} height="24" fill="#cdd8ee" stroke="#14203f" strokeWidth="1.5" />}
+    {student != null && <g><polygon points={`${X(student)},46 ${X(student) - 7},62 ${X(student) + 7},62`} fill="#b42d3f" /><line x1={X(student)} x2={X(student)} y1="14" y2="46" stroke="#b42d3f" strokeWidth="2" />
+      <text x={X(student)} y="11" fontSize="12" fontWeight="900" fill="#b42d3f" textAnchor="middle">내 평균 {Number(student).toFixed(2)}</text></g>}
+    {c50 != null && <text x={Math.min(a, b ?? a)} y="24" fontSize="11" fill="#14203f" textAnchor="start" fontWeight="700"></text>}
+  </svg>);
+}

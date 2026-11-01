@@ -11,6 +11,8 @@ import Intake from "./views/Intake.jsx";
 import Report from "./views/Report.jsx";
 import { DEMO_G } from "./demoData.js";
 import { applyQuant, tierOf, fitWord } from "./scoring.js";
+import { computeCoreFit, coreFitText } from "./coreFit.js";
+import { achievement2022 } from "./achievement2022.js";
 
 const UNIVS = ["강원대학교","건국대학교","경기대학교","경북대학교","경희대학교","고려대학교","광운대학교","국민대학교","단국대학교","덕성여자대학교","동국대학교","부산대학교","서강대학교","서울과학기술대학교","서울대학교","서울시립대학교","성균관대학교","세종대학교","숙명여자대학교","숭실대학교","아주대학교","연세대학교","이화여자대학교","인하대학교","중앙대학교","한국외국어대학교","한양대학교","홍익대학교"];
 
@@ -173,6 +175,7 @@ export default function App() {
   const [u0,setU0]=useState(""); const [d0,setD0]=useState("");
   const [u1,setU1]=useState(""); const [d1,setD1]=useState("");
   const [u2,setU2]=useState(""); const [d2,setD2]=useState("");
+  const [t0,setT0]=useState(""); const [t1,setT1]=useState(""); const [t2,setT2]=useState("");
   const [sg0,setSg0]=useState([]); const [op0,setOp0]=useState(false);
   const [sg1,setSg1]=useState([]); const [op1,setOp1]=useState(false);
   const [sg2,setSg2]=useState([]); const [op2,setOp2]=useState(false);
@@ -182,7 +185,7 @@ export default function App() {
   const [q2,setQ2]=useState(""); const [qop2,setQop2]=useState(false);
   const rTrend=useRef(); const rGroup=useRef();
   const formRef=useRef(); const resRef=useRef();
-  const ranks=[{u:u0,d:d0},{u:u1,d:d1},{u:u2,d:d2}];
+  const ranks=[{u:u0,d:d0,t:t0},{u:u1,d:d1,t:t1},{u:u2,d:d2,t:t2}];
 
   const processPdf=useCallback(async file=>{
     if(!file) return;
@@ -438,6 +441,11 @@ export default function App() {
         levelText = lb.buildLevelBlock({ targets: tg, major: inMajor });
         levelInfo = lb.levelInfoFor({ targets: tg, major: inMajor });
       } catch (e) { console.warn("[levelBlock] 로드 실패 — 기본 기준만 사용", e?.message); }
+      // 🆕 지원 학과 핵심·권장과목 이수 충족 현황(코드 산정) — 진로역량·희망학과 분석 근거
+      try {
+        const cf0 = computeCoreFit({ grades: [...(json.grades || []), ...(parsed.grades || [])], achievementSubjects: [...(json.achievementSubjects || []), ...(parsed.achievementSubjects || [])], curriculum: finalCurr }, ranks.filter(r => r.u && r.d), finalCurr);
+        const ct = coreFitText(cf0, finalCurr); if (ct) levelText = levelText + "\n\n" + ct;
+      } catch (e) { console.warn("[coreFit]", e?.message); }
       const phase2Prompt = buildPhase2Prompt(parsed, json, nameForPrompt, inMajor, finalCurr, ranks, univFitData, levelText);
       const phase3Prompt = buildPhase3Prompt(parsed, json, {}, nameForPrompt, inMajor, finalCurr, ranks, univFitData, levelText);
       const phase4Prompt = buildPhase4Prompt(parsed, json, {}, {}, nameForPrompt, inMajor, finalCurr, ranks, univFitData);
@@ -445,7 +453,7 @@ export default function App() {
       let extraBlock = "";
       try {
         const pb = await import("./planBlock.js");
-        extraBlock = pb.buildExtra({ targets: ranks.filter(r => r.u && r.d), is2022: (finalCurr||"").includes("2022") });
+        extraBlock = pb.buildExtra({ targets: ranks.filter(r => r.u && r.d), is2022: (finalCurr||"").includes("2022"), gradeAvg: json.gradeAvg });
       } catch (e) { console.warn("[planBlock] 로드 실패 — 기본 근거만 사용", e?.message); }
       const phase5Prompt = buildPhase5Prompt(parsed, json, {}, {}, nameForPrompt, ranks, univFitData, extraBlock + "\n\n" + levelText);
 
@@ -507,8 +515,19 @@ export default function App() {
       if (phase5Json.finalRecommendation) json.finalRecommendation = phase5Json.finalRecommendation;
       if (phase5Json.executiveSummary) json.executiveSummary = phase5Json.executiveSummary;
       // 🆕 정량 채점: 학업·탐구역량은 코드 계산 기본점수 ±3으로 확정, 총점 재합산
+      // 🆕 AI가 뽑은 성적표에 로컬 파서의 성취도·분포비율·수강자수를 합치고(과목 단위), 빠진 과목은 채운다
+      try {
+        const gk = (r) => `${r.grade}|${r.semester}|${String(r.subject||"").replace(/\s+/g,"")}`; const pm = new Map((parsed.grades||[]).map(r => [gk(r), r]));
+        json.grades = (json.grades || []).map(r => { const q = pm.get(gk(r)); return q ? { ...r, achievement: r.achievement || q.achievement, distribution: r.distribution || q.distribution, students: r.students || q.students, rawScore: r.rawScore || q.rawScore, avg: r.avg || q.avg, sd: r.sd || q.sd } : r; });
+        const have = new Set(json.grades.map(gk)); (parsed.grades||[]).forEach(r => { if (!have.has(gk(r))) json.grades.push(r); });
+        const ak = (r) => `${r.grade}|${r.semester}|${String(r.subject||"").replace(/\s+/g,"")}`; const haveA = new Set((json.achievementSubjects||[]).map(ak));
+        (parsed.achievementSubjects||[]).forEach(r => { if (!haveA.has(ak(r))) (json.achievementSubjects = json.achievementSubjects || []).push(r); });
+        json._ach2022 = achievement2022(json);
+      } catch (e) { console.warn("[ach2022]", e?.message); }
+      try { json._coreFit = computeCoreFit({ grades: [...(json.grades || []), ...(parsed.grades || [])], achievementSubjects: [...(json.achievementSubjects || []), ...(parsed.achievementSubjects || [])], curriculum: finalCurr }, ranks.filter(r => r.u && r.d), finalCurr); } catch (e) { console.warn('[coreFit]', e?.message); }
       try { applyQuant(json, inMajor || (ranks.find(r => r.d) || {}).d); } catch (e) { console.warn('[quant]', e?.message); }
       json._levelInfo = levelInfo;
+      try { const pb2 = await import("./planBlock.js"); (json.finalRecommendation?.top10 || []).forEach(r => { try { r._cut = pb2.cutInfoFor(r.univ, r.dept, r.admissionType); } catch (e) {} }); } catch (e) { console.warn("[cutInfo]", e?.message); }
 
       setProg(90); setStep("결과 후처리 중...");
 
@@ -612,7 +631,7 @@ export default function App() {
       setTimeout(()=>{resRef.current?.scrollIntoView({behavior:"smooth"});setProg(0);setStep("");},600);
     }catch(e){setErr(String(e.message||e).slice(0,200));setProg(0);setStep("");}
     setBusy(false);
-  },[pdfB64,htmlContent,inName,inMajor,inCurr,inSchoolType,u0,d0,u1,d1,u2,d2]);
+  },[pdfB64,htmlContent,inName,inMajor,inCurr,inSchoolType,u0,d0,t0,u1,d1,t1,u2,d2,t2]);
 
   const name=G?.studentName||inName||"학생";
   const total=G?.totalScore||0;
@@ -623,7 +642,7 @@ export default function App() {
     if(!G) return;
     const esc=(s)=>String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
     const fmt=(s)=>esc(s).replace(/\*\*([^*]+)\*\*/g,'<b>$1</b>').replace(/《([^》]+)》/g,'<b style="background:#fde68a;">$1</b>').replace(/「([^」]+)」/g,'<b style="color:#0b7a77;">$1</b>').replace(/\n/g,'<br/>');
-    const ov=tierOf(total,100); const MX={academic:40,inquiry:25,career:15,community:10,growth:10};
+    const ov=(G._tiers&&G._tiers.overall)||tierOf(total,100); const MX={academic:40,inquiry:25,career:15,community:10,growth:10};
     const NM={academic:"학업역량",inquiry:"탐구역량",career:"진로역량",community:"공동체역량",growth:"성장역량"};
     const h2=(t)=>`<h2 style="font-size:15pt;border-bottom:1.5pt solid #14203f;padding-bottom:3pt;margin:20pt 0 8pt;color:#14203f;">${t}</h2>`;
     const th=(t)=>`<th style="background:#f6f2ea;border:0.5pt solid #cfc6b8;padding:4pt 6pt;font-size:10pt;text-align:left;">${t}</th>`;
@@ -633,7 +652,7 @@ export default function App() {
       <div style="font-size:10pt;color:#555;margin-top:4pt;">${esc(G.schoolName||"")} · ${esc(name)} 학생 · ${esc(G.stageLabel||"")} · 평균등급 ${esc(G.gradeAvg||"-")} · ${new Date().toLocaleDateString("ko-KR")}</div></div>`;
     b+=`<div style="background:#f6f2ea;border-top:3pt solid #0f9a90;padding:8pt 12pt;font-size:11pt;"><b>종합 수준 판정 · ${esc(ov.label)}</b> (${esc(ov.ex)})<br/>${fmt(G.executiveSummary?.headline||G.scoreSummary||"")}</div>`;
     if(G.competencies){ b+=h2("1. 역량별 수준과 근거"); b+=`<table style="width:100%;border-collapse:collapse;"><tr>${th("역량")}${th("수준")}${th("플러스(＋) 근거")}${th("마이너스(－) 근거")}</tr>`+
-      Object.keys(NM).map(k=>{const c=G.competencies[k]||{};const t=tierOf(c.score,MX[k]);const bd=c.scoreBreakdown||{};
+      Object.keys(NM).map(k=>{const c=G.competencies[k]||{};const t=(G._tiers&&G._tiers[k])||tierOf(c.score,MX[k]);const bd=c.scoreBreakdown||{};
         return `<tr>${td("<b>"+NM[k]+"</b>")}${td(esc(t.shortLabel))}${td((bd.plusFactors||[]).map(x=>"· "+fmt(x.reason)).join("<br/>"))}${td((bd.minusFactors||[]).map(x=>"· "+fmt(x.reason)).join("<br/>"))}</tr>`;}).join("")+`</table>`; }
     if(G.strengths?.length) b+=h2("2. 핵심 강점")+G.strengths.map(s=>`<p style="font-size:11pt;line-height:1.8;margin:0 0 6pt;"><b>${esc(s.title||"")}</b> — ${fmt(s.content||"")}</p>`).join("");
     if(G.weaknesses?.length) b+=h2("3. 보완점")+G.weaknesses.map(s=>`<p style="font-size:11pt;line-height:1.8;margin:0 0 6pt;"><b>${esc(s.title||"")}</b> — ${fmt(s.content||"")}</p>`).join("");
@@ -649,16 +668,23 @@ export default function App() {
   };
 
   // ── 새 화면용 보조 함수 ──
-  const targets=[{u:u0,d:d0},{u:u1,d:d1},{u:u2,d:d2}];
-  const addTarget=(u,d)=>{
-    const sets=[[setU0,setD0,setQ0],[setU1,setD1,setQ1],[setU2,setD2,setQ2]];
-    const idx=targets.findIndex(t=>!t.u); if(idx<0) return;
-    sets[idx][0](u); sets[idx][1](d); sets[idx][2](`${u} ${d}`);
+  const targets=[{u:u0,d:d0,t:t0},{u:u1,d:d1,t:t1},{u:u2,d:d2,t:t2}];
+  const addTarget=(u,d,t="")=>{
+    const sets=[[setU0,setD0,setQ0,setT0],[setU1,setD1,setQ1,setT1],[setU2,setD2,setQ2,setT2]];
+    const idx=targets.findIndex(x=>!x.u); if(idx<0) return;
+    sets[idx][0](u); sets[idx][1](d); sets[idx][2](`${u} ${d}`); sets[idx][3](t||"");
     if(!inMajor) setInMajor(d);
   };
-  const removeTarget=(i)=>{ const sets=[[setU0,setD0,setQ0],[setU1,setD1,setQ1],[setU2,setD2,setQ2]]; sets[i][0]("");sets[i][1]("");sets[i][2](""); };
-  const loadDemo=async()=>{ let li=null; try{ const lb=await import("./levelBlock.js"); li=lb.levelInfoFor({targets:[{d:"사학과"}],major:"사학과"}); }catch(e){} setG(applyQuant({...DEMO_G,_levelInfo:li},"사학과")); setInMajor("사학과"); setPhase("result"); };
-  useEffect(()=>{ if(typeof window!=="undefined" && /[?&]demo=1/.test(window.location.search)) loadDemo(); },[]);
+  const removeTarget=(i)=>{ const sets=[[setU0,setD0,setQ0,setT0],[setU1,setD1,setQ1,setT1],[setU2,setD2,setQ2,setT2]]; sets[i][0]("");sets[i][1]("");sets[i][2]("");sets[i][3](""); };
+  const loadDemo=async()=>{
+    const is22 = typeof window!=="undefined" && /[?&]demo=2022/.test(window.location.search);
+    let li=null; try{ const lb=await import("./levelBlock.js"); li=lb.levelInfoFor({targets:[{d:"사학과"}],major:"사학과"}); }catch(e){}
+    let G0={...DEMO_G,_levelInfo:li};
+    if(is22){ const A=["A","A","B","A","B"], R=[18,22,45,60,32]; G0={...G0,curriculum:"2022",is2022:true,gradeAvg:"2.95",grades:DEMO_G.grades.map((r,i)=>({...r,level:Math.min(5,Math.max(1,Math.ceil(r.level*0.8))),achievement:A[i%5],distribution:`A:${R[i%5]}% B:30% C:20% D:10% E:5%`,students:"120",rawScore:String(95-(i%5)*4),avg:String(72-(i%4)*3)}))}; G0._ach2022=achievement2022(G0); }
+    G0._coreFit=computeCoreFit(G0,[{u:"서울대",d:"사학과"},{u:"한양대",d:"사학과"}],G0.curriculum);
+    try{ const pb=await import("./planBlock.js"); (G0.finalRecommendation?.top10||[]).forEach(r=>{ try{ r._cut=pb.cutInfoFor(r.univ,r.dept,r.admissionType);}catch(e){} }); }catch(e){}
+    setG(applyQuant(G0,"사학과")); setInMajor("사학과"); setPhase("result"); };
+  useEffect(()=>{ if(typeof window!=="undefined" && /[?&]demo=(1|2022)/.test(window.location.search)) loadDemo(); },[]);
   const reset=()=>{ setPhase("landing"); setG(null); window.scrollTo({top:0}); };
 
   return (

@@ -15,7 +15,8 @@ export function rich(text){
   if(last<s.length) parts.push(s.slice(last).replace(/\*\*/g,""));
   return parts;
 }
-export const firstSentence=(s,n=90)=>{ const t=String(s||"").replace(/\s+/g," ").trim(); const i=t.search(/[.다요]\s/); const cut=i>20&&i<n+40?t.slice(0,i+1):t.slice(0,n); return cut+(cut.length<t.length&&cut===t.slice(0,n)?"…":""); };
+export const firstSentence=(s,n=90)=>{ const t=String(s||"").replace(/\s+/g," ").trim(); if(t.length<=n) return t; const sents=t.split(/(?<=[.!?])\s+/); let out=""; for(const x of sents){ out+=(out?" ":"")+x; if(out.length>=n) break; } return out; };
+export const tidy=(s)=>String(s||"").replace(/\r/g,"").replace(/[ \t]+\n/g,"\n").replace(/\n{3,}/g,"\n\n");
 export function getMajorRelatedGroups(major){
   const m=String(major||"").toLowerCase();
   if(/공학|컴퓨터|전기|전자|기계|화공|신소재|반도체|로봇|항공|건축|토목|산업/.test(m)) return ["수학","과학"];

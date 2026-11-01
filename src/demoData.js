@@ -4,7 +4,7 @@ const grades=[
  mk(1,1,"국어","국어",2,4),mk(1,1,"수학","수학",2,4),mk(1,1,"영어","영어",1,4,"97","74.3","14.8"),mk(1,1,"한국사","사회",1,3),mk(1,1,"통합과학","과학",2,3),
  mk(1,2,"국어","국어",2,4),mk(1,2,"수학","수학",2,4),mk(1,2,"영어","영어",2,4),mk(1,2,"통합사회","사회",1,3),mk(1,2,"정보","기타",1,2),
  mk(2,1,"문학","국어",2,4),mk(2,1,"수학Ⅰ","수학",3,4,"78","66.2","14.1"),mk(2,1,"영어Ⅰ","영어",2,4),mk(2,1,"세계사","사회",1,3),mk(2,1,"화학Ⅰ","과학",3,3,"84","70.5","11.2"),
- mk(2,2,"독서","국어",2,3),mk(2,2,"수학Ⅱ","수학",2,4),mk(2,2,"영어Ⅱ","영어",2,4),mk(2,2,"정치와 법","사회",1,3),mk(2,2,"물리학Ⅰ","과학",2,3),
+ mk(2,2,"독서","국어",2,3),mk(2,2,"일본어Ⅰ","기타",2,2),mk(2,2,"수학Ⅱ","수학",2,4),mk(2,2,"영어Ⅱ","영어",2,4),mk(2,2,"정치와 법","사회",1,3),mk(2,2,"물리학Ⅰ","과학",2,3),
  mk(3,1,"화법과 작문","국어",2,3),mk(3,1,"확률과 통계","수학",3,3),mk(3,1,"영어 독해와 작문","영어",3,3),mk(3,1,"동아시아사","사회",2,3),
 ];
 const A=(g,s,type,subject,subjectName,title,depth,topicKey,linkType,linkFrom,methods,content)=>({year:`${g}학년`,semester:`${s}학기`,gN:g,sN:s,type,subject,subjectName,title,depth,topicKey,linkType,linkFrom,methods,content,motivation:"수업에서 제기된 의문을 스스로 확장해 보려는 동기가 확인됨(예시).",process:"문헌 조사 후 자료를 직접 정리·비교하는 과정이 서술됨(예시).",growth:"다음 학기 활동으로 이어지는 후속 질문이 제시됨(예시)."});
@@ -72,8 +72,8 @@ export const DEMO_G={
  topUnivCompare:{univs:[{univ:"서울대",verdict:"불리",admissionProbability:{min:3,max:8},전형추천:"학생부종합(일반)",summary:"전공 탐구는 강하나 내신 격차가 큽니다."},{univ:"연세대",verdict:"불리",admissionProbability:{min:5,max:11},전형추천:"활동우수형",summary:"활동 깊이는 좋으나 내신이 아쉽습니다."}],advice:"상위권 1~2곳은 소신으로, 나머지는 적정 라인에 맞춰 준비하세요."},
  executiveSummary:{headline:"사학 탐구는 3개 학기에 걸쳐 4단계까지 깊어졌지만 내신·수학 약세와 3학년 하락으로, 상위권은 소신 1곳·중상위권 적정이 현실적입니다.",strengths:["식민지 근대화 줄기가 3과목·3학기에 걸쳐 깊이 2→4","사회 교과 전 학기 1~2등급","역사 진로가 1~3학년 일관"],risks:["수학·영어 3등급, 3학년 1학기 하락","3학년 탐구 기록 2건으로 얇음","리더십·선출직 근거 부족"],actions:["3-2 활동은 새 주제 대신 기존 줄기의 후속 검증","영어·수학 기초 점검으로 하락 차단","학급·동아리 역할 사례 정리"]},
  finalRecommendation:{interviewCaveat:"top10 중 일부 전형은 면접이 포함됩니다. 확률은 서류 기준 추정치이며 면접 결과에 따라 달라질 수 있습니다.",
-  top10:[{rank:1,univ:"한양대",dept:"사학과",admissionType:"학생부종합(서류형)",tier:"소신",admissionProbability:{min:20,max:32},hasInterview:false,reason:"3개 학기 연속 4단계 탐구가 서류 평가에서 강점으로 읽힙니다."},
-   {rank:2,univ:"중앙대",dept:"사학과",admissionType:"학생부종합(융합형)",tier:"적정",admissionProbability:{min:34,max:46},hasInterview:true,reason:"면접에서 탐구의 한계 인식을 설명할 수 있으면 유리합니다."},
+  top10:[{rank:1,univ:"한양대",dept:"사학과",admissionType:"학생부종합(서류형)",tier:"소신",admissionProbability:{min:20,max:32},hasInterview:false,profile:"학업 성취와 함께 한 주제를 학기마다 깊게 이어 간 학생을 선호함. 서류 100% 평가이며 수능최저가 있어 최저 충족 가능성을 따로 확인해야 함.",gradeView:"최근 합격자 70%컷보다 내 평균등급이 높아 교과 면에서는 불리하지 않음. 다만 서류형은 정성 평가가 당락을 가르고 특목·자사고가 섞인 합격선이라 일반고 기준으로는 더 엄격하게 봄.",inquiryFit:"식민지 근대화 줄기가 3개 학기에 걸쳐 깊어진 점이 강점임. 수학·과학과의 횡적 연결이 없어 학업형 평가에서는 약점으로 읽힘.",gaps:["학업역량: 수학·영어 3등급과 3학년 하락","공동체역량: 선출직·지속 리더 경험 부재"],reason:"3개 학기 연속 4단계 탐구가 서류 평가에서 강점으로 읽히나, 교과 성적 격차가 커 소신 지원으로 봄."},
+   {rank:2,univ:"중앙대",dept:"사학과",admissionType:"학생부종합(융합형)",tier:"적정",admissionProbability:{min:34,max:46},hasInterview:true,profile:"면접형은 서류 통과 후 면접 비중이 커서 탐구 내용을 직접 설명하는 학생이 유리함.",gradeView:"교과 성적은 합격자 중위권보다 낮으나 학종 비중이 커서 영향이 상대적으로 작음.",inquiryFit:"표본 한계를 스스로 지적한 기록은 면접 설명 근거로 쓸 수 있음.",gaps:["탐구역량: 불평등 줄기의 깊이 정체"],reason:"면접에서 탐구의 한계 인식을 설명할 수 있으면 유리함."},
    {rank:3,univ:"동국대",dept:"사학과",admissionType:"학생부종합(Do Dream)",tier:"적정",admissionProbability:{min:38,max:50},hasInterview:true,reason:"관련 교과 우수가 반영됩니다."},
    {rank:4,univ:"경희대",dept:"사학과",admissionType:"교과 병행",tier:"안정",admissionProbability:{min:52,max:64},hasInterview:false,reason:"교과 성적 기준 안정권."}],
   avoid:[{univ:"서울대",dept:"사학과(학종 일반)",reason:"전공 탐구는 강하지만 내신·수학 격차가 커 현재는 확률이 낮습니다."}]},

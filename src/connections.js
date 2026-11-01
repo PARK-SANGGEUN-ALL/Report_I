@@ -28,3 +28,20 @@ export function connectionMetrics(G) {
   const hSems = new Set(horizontal.map(h => h.key)).size; const vH = !horizontal.length ? "미흡" : (horizontal.length >= 2 && hSems >= 2) ? "우수" : "양호";
   return { acts, vertical, horizontal, isolated, coverage, verdict: { vertical: vV, horizontal: vH } };
 }
+
+/* ── 탐구 계보도용 연결선: 같은 주제어를 공유하는 기록을 학기 순으로 잇고, 연결 종류와 이유를 코드가 산정 ── */
+export function buildLinks(G) {
+  const acts = (G.activities || []).map((a, i) => { const g = +a.gN || parseInt(a.year) || 1; let s = +a.sN || parseInt(a.semester) || 1; if (s !== 1 && s !== 2) s = 1;
+    return { ...a, i, g, s, key: `${g}-${s}`, d: Math.min(4, Math.max(1, parseInt(a.depth) || 1)), topic: (a.topicKey || "").trim(), subj: labelOf(a), methodsArr: a.methods || [] }; });
+  const links = []; const by = {}; acts.forEach(a => { if (a.topic) (by[a.topic] = by[a.topic] || []).push(a); });
+  Object.entries(by).forEach(([t, list]) => { list.sort((a, b) => SEM(a.key) - SEM(b.key) || a.i - b.i);
+    for (let k = 1; k < list.length; k++) { const p = list[k - 1], n = list[k]; if (p.key === n.key) continue;
+      const moved = p.subj !== n.subj; const newM = n.methodsArr.filter(m => !p.methodsArr.includes(m));
+      const type = n.d > p.d ? "심화" : moved ? "확장" : newM.length ? "전환" : "반복";
+      const parts = [`같은 주제 「${t}」를 ${moved ? `${p.subj}에서 ${n.subj}로 옮겨` : `${n.subj}에서 이어`} 다룸`];
+      parts.push(n.d > p.d ? `깊이가 ${p.d}단계에서 ${n.d}단계로 상승함` : n.d < p.d ? `깊이가 ${p.d}단계에서 ${n.d}단계로 낮아짐` : `깊이가 ${n.d}단계로 유지됨`);
+      if (newM.length) parts.push(`새로 쓴 방법은 ${newM.slice(0, 3).join(", ")}임`);
+      if (type === "반복") parts.push("새 방법이 없어 되풀이로 읽힘");
+      links.push({ from: p.i, to: n.i, topic: t, type, reason: parts.join(". ") + ".", ai: n.linkReason || "" }); } });
+  return { acts, links };
+}

@@ -59,13 +59,13 @@ export function buildLevelBlock({ targets = [], major = "" } = {}) {
   const L = [LEVEL_SCALE];
   const info = levelInfoFor({ targets, major });
   if (info.length) {
-    L.push("\n【🎯 이 학생의 희망 학과군 — 면접에서 실제 질문받은 탐구의 «적정 수준» (모두의 진학 분석)】");
+    L.push("\n【🎯 이 학생의 희망 학과군 — 면접에서 실제 질문받는 탐구의 «적정 수준»】");
     info.forEach(g => L.push(`■ ${g.name}(${g.fam}) — ${cut(g.headline, 120)}\n  · 수준 분포: ${cut(g.mix, 260)}\n  · 적정 수준: ${cut(g.proper, 300)}\n  · 수준 조절: ${cut(g.adjust, 200)}\n  · 주의: ${cut(g.caution, 200)}`));
     L.push("→ 위 «적정 수준»을 기준으로 각 활동의 levelFit(적정/과소/과잉)을 판정하고, 탐구역량 점수와 weaknesses에 반영할 것. 학과군이 달라도 아래 과목별 기준은 항상 참고.");
   } else {
     L.push("\n(희망 학과가 없거나 학과군 매칭 불가 — 계열 공통 기준으로 판단하고 '교과 심화 수준 + 직접 설명 가능'을 적정으로 볼 것)");
   }
-  L.push("\n【📚 과목별 적정 탐구 수준 (면접 질문 981건 분석)】");
+  L.push("\n【📚 과목별 적정 탐구 수준】");
   Object.entries(LV.subjects).forEach(([s, v]) => { if (v.proper) L.push(`- ${s}: ${cut(v.proper, 210)}`); });
   return L.join("\n");
 }

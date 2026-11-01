@@ -30,8 +30,11 @@ export function quantAcademic(G, major) {
   if (sd > 1.8) add(`과목 간 편차 큼(표준편차 ${sd.toFixed(2)})`, -2); else if (sd > 1.2) add(`과목 간 편차 있음(표준편차 ${sd.toFixed(2)})`, -1);
   const pos = !is2022 ? rows.map(r => topPct(r.rawScore, r.avg, r.sd)).filter(p => p != null) : [];
   if (pos.length >= 4) { const pa = pos.reduce((a, b) => a + b, 0) / pos.length; const gradeByPct = p => p <= 4 ? 1 : p <= 11 ? 2 : p <= 23 ? 3 : p <= 40 ? 4 : p <= 60 ? 5 : p <= 77 ? 6 : p <= 89 ? 7 : p <= 96 ? 8 : 9; if (gradeByPct(pa) < Math.round(avgRaw)) add(`원점수 기준 실제 위치가 등급보다 우수(평균 상위 ${pa.toFixed(1)}%)`, 1); }
+  if (is2022 && G._ach2022) { const m = G._ach2022.summary;
+    if (m.nA >= 3 && m.coreARate >= 70 && m.avgARate != null && m.avgARate <= 30) add(`기본교과 성취도 A 비율 ${m.coreARate}%이고 받은 A의 평균 분포비율이 ${m.avgARate}%로 희소함`, 1);
+    else if (m.avgARate != null && m.avgARate >= 50 && m.nA >= 3) add(`받은 성취도 A의 평균 분포비율이 ${m.avgARate}%로 A가 흔한 과목 위주라 성취도의 변별력이 낮음`, -1); }
   const base = clamp(Math.round(hit[1] + adj), 0, 40);
-  return { key: "academic", max: 40, base, lo: clamp(base - 3, 0, 40), hi: clamp(base + 3, 0, 40), rows: out, caps: [] };
+  return { key: "academic", max: 40, base, avg9, lo: clamp(base - 3, 0, 40), hi: clamp(base + 3, 0, 40), rows: out, caps: [] };
 }
 
 export function quantInquiry(G) {
@@ -60,11 +63,28 @@ export function quantInquiry(G) {
 /** AI가 매긴 학업·탐구 점수를 정량 기본점수 ±3 범위로 보정하고 근거표를 붙인다. 총점도 다시 합산한다. */
 export function applyQuant(G, major) {
   const C = G.competencies; if (!C) return G;
-  [quantAcademic(G, major), quantInquiry(G)].forEach(q => {
+  if (G.activities) G.activities = G.activities.map(auditActivity);            // 탐구 기록 보수적 감사
+  const qa = quantAcademic(G, major), qi = quantInquiry(G);
+  [qa, qi].forEach(q => {
     if (!q || !C[q.key]) return; const c = C[q.key]; const ai = Number(c.score) || q.base; const fin = clamp(Math.round(ai), q.lo, q.hi);
     c.quant = { ...q, ai, final: fin }; c.score = fin; c.max = q.max; c.grade = letter(fin, q.max);
   });
+  // 진로역량: 지원 학과 핵심과목 충족률 + 전공 관련 교과 이수 분석
+  if (C.career) { const c = C.career; const ai = Number(c.score) || 0; const rows = [{ label: "AI 판단(진로 일관성·세특 깊이·3개 학년 연계)", pts: ai, note: "기준" }]; let d = 0, cap = null; const caps = [];
+    const rc = relatedCourseAnalysis(G, major); const ok2022 = rc.is2022;
+    if (rc.count > 0 || ok2022) { let p = 0; if (ok2022) { if (rc.count >= 8 && rc.elective >= 2) p = 1; else if (rc.count <= 3) p = -2; } else if (rc.count >= 6) p = 1;
+      rows.push({ label: `전공 관련 교과(${rc.groups.join("·")}) 이수 ${rc.count}과목(진로선택 ${rc.elective}과목${rc.avgLv != null ? ", 평균 " + rc.avgLv.toFixed(1) + "등급" : ""})`, pts: p, note: ok2022 ? "관련 교과 이수 폭" : "2015 개정: 이수 폭만 참고(감점 없음)" }); d += p; }
+    const cf = (G._coreFit || []).find(f => f.found && f.core?.rate != null);
+    if (cf) { const r = cf.core.rate; let p = 0; if (cf.is2022) { if (r >= 90) p = 1; else if (r >= 70) p = 0; else if (r >= 50) p = -1; else { p = -3; cap = 9; } } else if (r >= 70) p = 1;
+      const okN = cf.core.items.filter(x => x.status !== "no").length;
+      rows.push({ label: `${cf.univ} ${cf.dept} 핵심과목 충족률 ${r}% (${okN}/${cf.core.items.length}개 이수)`, pts: p, note: cf.is2022 ? "공식 권장과목 기준 가감" : "2015 개정: 관련 교과 이수 참고(감점 없음)" }); d += p; }
+    let fin = clamp(ai + d, 0, 15); if (cap != null && fin > cap) { fin = cap; caps.push("핵심과목 충족률이 50% 미만이라 진로역량 상위 구간에 도달하지 못하도록 상한 적용"); }
+    if (rows.length > 1) { c.quant = { key: "career", max: 15, base: ai, lo: fin, hi: fin, ai, final: fin, caps, rows }; c.score = fin; c.grade = letter(fin, 15); } }
   const sum = Object.values(C).reduce((s, c) => s + (Number(c?.score) || 0), 0); if (sum > 0) G.totalScore = Math.round(sum);
+  // 수준(대학 그룹) 판정
+  const T = {}; T.academic = qa?.avg9 ? tierFromAvg9(qa.avg9) : tierOf(C.academic?.score, 40);
+  ["inquiry", "career", "community", "growth"].forEach(k => { T[k] = tierOf(C[k]?.score, { inquiry: 25, career: 15, community: 10, growth: 10 }[k]); });
+  T.overall = overallTier(G, qa) || tierOf(G.totalScore, 100); G._tiers = T;
   return G;
 }
 
@@ -72,7 +92,7 @@ export function applyQuant(G, major) {
 export const RUBRIC_TABLE = [
   { name: "학업역량", key: "academic", how: "국영수사과 학점가중 평균등급을 기준으로 전공 관련 교과·학기 추세·과목 편차·원점수 위치를 가감해 코드가 기본 수준을 정하고, AI는 한 단계 안에서만 보정", bands: [["최상위권", "평균 약 1.3등급 이내, 편차·하락 없음"], ["상위권", "약 1.3~1.9등급, 전공 관련 교과 우수"], ["중상위권", "약 1.9~2.7등급"], ["중위권", "약 2.7~3.6등급"], ["거점국립대·중하위권", "약 3.6~4.6등급"], ["기초 보완 단계", "약 4.6등급 초과"]] },
   { name: "탐구역량", key: "inquiry", how: "탐구 깊이(3·4단계) 기록 수, 학과군 적정 수준 부합, 2학기 이상 이어진 줄기, 마지막 단계 하락·반복·수준 과잉·빈 학기를 코드가 세어 기본 수준을 정하고 AI는 한 단계 안에서만 보정", bands: [["최상위·상위권", "서로 다른 교과 2개·학기 2개 이상에서 깊이 3단계+가 반복되고 수준이 적정"], ["중상위권", "2개 교과·2개 학기의 일관된 탐구"], ["중위권", "단발 사례, 발표·독서 나열, 교과 기본 수준 위주"], ["그 이하", "탐구 기록 부족"]] },
-  { name: "진로역량", key: "career", how: "AI 판단(원문 근거) — 상한 규칙 적용", bands: [["상위권 이상", "이수과목 적합성+세특 깊이+3개 학년 일관성이 자율·동아리·진로 중 2개 영역 이상에서 확인"], ["중상위~중위권", "한 영역에서만 일관"], ["중위권 이하", "3학년에만 갑자기 진로 연관(뒤늦은 끼워맞추기)"]] },
+  { name: "진로역량", key: "career", how: "AI 판단(원문 근거)에 지원 학과 핵심과목 이수 충족률을 코드가 가감 반영(2022 개정: 90%↑ 가점, 70% 미만 감점, 50% 미만 상한 / 2015 개정: 가점만)", bands: [["상위권 이상", "이수과목 적합성+세특 깊이+3개 학년 일관성이 자율·동아리·진로 중 2개 영역 이상에서 확인"], ["중상위~중위권", "한 영역에서만 일관"], ["중위권 이하", "3학년에만 갑자기 진로 연관(뒤늦은 끼워맞추기)"]] },
   { name: "공동체역량", key: "community", how: "AI 판단 — 상한 규칙 적용", bands: [["상위권 이상", "선출직 리더십 또는 지속 협업·봉사가 2개 학기 이상 구체 근거로 확인"], ["중위권", "학급 구성원 수준·일회성 활동만"]] },
   { name: "성장역량", key: "growth", how: "AI 판단 — 상한 규칙 적용", bands: [["상위권 이상", "성적·활동 모두 2개 학기 이상 비교해 상승"], ["중위권", "둘 중 하나만 개선·나머지 정체/하락"]] },
 ];
@@ -93,3 +113,49 @@ export function tierOf(score, max) {
   return { idx, tier: band.k, short: band.short, ex: band.ex, sub, label: `${band.k}${sub ? " " + sub : ""}`, shortLabel: `${band.short}${sub ? " " + sub : ""}` };
 }
 export const fitWord = s => (s >= 85 ? "매우 높음" : s >= 72 ? "높음" : s >= 60 ? "보통" : "낮음");
+
+/* ── 탐구 기록 보수적 감사: AI가 후하게 매긴 깊이·수준을 원문 근거 기준으로 낮춘다 ── */
+const DIRECT = /실험|측정|설문|면담|인터뷰|데이터|모델링|코딩|프로그래밍|설계|제작|시뮬레이션|통계|분석/;
+const REFLECT = /한계|오차|개선|재검증|후속|보완|수정|반례|검증|재설계|가설 수정/;
+export function auditActivity(a) {
+  const raw = clamp(parseInt(a.depth) || 1, 1, 4); let d = raw; const methods = (a.methods || []).join(" ");
+  const text = [a.content, a.levelNote, a.process, a.growth].filter(Boolean).join(" ");
+  if (d >= 3 && !DIRECT.test(methods + " " + (a.levelNote || ""))) d = 2;               // 직접 자료를 만든 근거가 없으면 3단계 불인정
+  if (d >= 4 && !((a.methods || []).length >= 3 && REFLECT.test(text))) d = 3;           // 한계·개선·후속 서술과 방법 3개 이상이 없으면 4단계 불인정
+  let level = a.level, fit = a.levelFit;
+  if (level === "전공" && d < 3) level = "심화";                                         // 직접 설명 근거 없는 전공 수준은 심화로
+  if (level === "심화" && d <= 2) level = "기본";                                        // 조사·정리 단계의 기록은 기본 수준
+  if (fit === "적정" && level === "기본") fit = "과소";
+  if (fit === "적정" && level === "전공" && d < 4) fit = "과잉";
+  return { ...a, depthRaw: raw, depth: d, levelRaw: a.level, level, levelFit: fit };
+}
+
+/* ── 학업역량의 대학 그룹 수준: 평균등급(9등급 환산) 기준이 가장 우선 ── */
+export const ACAD_CUTS = [1.3, 2.0, 2.8, 3.8, 5.0];
+export function tierFromAvg9(avg9) {
+  let idx = ACAD_CUTS.findIndex(x => avg9 <= x); if (idx < 0) idx = 5; const band = TIER_STEPS[idx];
+  const lo = idx === 0 ? 1.0 : ACAD_CUTS[idx - 1], hi = idx < 5 ? ACAD_CUTS[idx] : 9; const pos = (hi - avg9) / (hi - lo);
+  const sub = idx === 5 ? "" : pos >= 0.67 ? "상단" : pos >= 0.34 ? "중단" : "하단";
+  return { idx, tier: band.k, short: band.short, ex: band.ex, sub, label: `${band.k}${sub ? " " + sub : ""}`, shortLabel: `${band.short}${sub ? " " + sub : ""}` };
+}
+/* 종합 수준: 학업(교과성적)이 천장 — 탐구가 아주 우수하면 한 단계까지만 상향, 탐구·진로가 약하면 하향 */
+export function overallTier(G, qa) {
+  const C = G.competencies || {}; if (!qa?.avg9) return null; const base = tierFromAvg9(qa.avg9);
+  const t = (k, m) => tierOf(C[k]?.score, m).idx; const inq = t("inquiry", 25), car = t("career", 15), com = t("community", 10), gro = t("growth", 10);
+  const comp = Math.round(inq * 0.5 + car * 0.3 + com * 0.1 + gro * 0.1);
+  let idx = base.idx, sub = base.sub;
+  if (comp <= base.idx - 1 && inq <= base.idx - 1 && car <= base.idx) { idx = Math.max(0, base.idx - 1); sub = "하단"; }
+  else if (comp >= base.idx + 2) { idx = Math.min(5, base.idx + 1); sub = idx === 5 ? "" : "상단"; }
+  const band = TIER_STEPS[idx];
+  return { idx, tier: band.k, short: band.short, ex: band.ex, sub, label: `${band.k}${sub ? " " + sub : ""}`, shortLabel: `${band.short}${sub ? " " + sub : ""}`, academicIdx: base.idx, lifted: idx < base.idx, lowered: idx > base.idx };
+}
+
+/* ── 진로역량: 전공 관련 교과 이수 분석(희망 학과가 없어도 계열 기준) ── */
+export function relatedCourseAnalysis(G, major) {
+  const is2022 = (G.curriculum || "").includes("2022") || G.is2022; const rg = relGroups(major || G.studentType);
+  const all = [...(G.grades || []), ...(G.achievementSubjects || [])].filter(r => r && r.subject);
+  const rel = all.filter(r => rg.includes(r.group)); const names = [...new Set(rel.map(r => r.subject))];
+  const elective = (G.achievementSubjects || []).filter(r => rg.includes(r.group)).length;
+  const lv = rel.filter(r => lvN(r.level) > 0).map(r => lvN(r.level)); const avgLv = lv.length ? lv.reduce((a, b) => a + b, 0) / lv.length : null;
+  return { groups: rg, names, count: names.length, elective, avgLv, is2022 };
+}
