@@ -326,3 +326,26 @@ table.rp td.c,table.rp th.c{text-align:center}
 .rp-app td.gb{padding:14px 18px}
 @media(max-width:900px){.sheet{padding:26px 16px 30px;font-size:16px}.rp-title{font-size:27px}.rp-p{font-size:16px}table.rp{font-size:14.5px}.grid.split{grid-template-columns:minmax(0,1fr)}.dg{min-width:760px}.dg-wrap{overflow-x:auto}}
 @media print{.sheet{border:none;box-shadow:none;max-width:none}}
+
+.hero-title{font-size:clamp(46px,6.4vw,92px);line-height:1.06;letter-spacing:-.055em}
+.hero-hit{display:inline-block;color:var(--teal2);font-size:1.28em;line-height:1;background:linear-gradient(transparent 70%,rgba(240,169,49,.45) 70%);padding:0 .06em}
+.hero-sub b{color:var(--ink)}
+
+/* ── 첫 화면 임팩트 ── */
+.hero-title{font-size:clamp(46px,6.2vw,84px);line-height:1.08;font-weight:900;letter-spacing:-.05em}
+.hero-title .hl{display:inline-block;color:#fff;background:linear-gradient(135deg,#0f9a90,#0a6866);padding:0 .22em .04em;margin:.04em 0;border-radius:.12em;text-shadow:none;box-shadow:6px 6px 14px rgba(11,122,119,.35),-4px -4px 10px rgba(255,255,255,.7)}
+.hero-sub{font-size:18px;line-height:1.85;color:var(--ink);max-width:560px}.hero-sub b{color:var(--teal2);font-weight:900}
+.hero-pill{font-size:14px}
+.proof{display:flex;gap:10px;flex-wrap:wrap;margin:0 0 24px}
+.proof span{padding:10px 16px;border-radius:99px;box-shadow:var(--sh-s);font-size:13.5px;font-weight:700;color:var(--ink2);background:var(--bg)}
+.proof span b{color:var(--ink);font-weight:900;margin-right:6px}
+.kpi b{font-size:34px;color:var(--teal2)}
+.kpi.dark{background:linear-gradient(150deg,#16294f,#0c5f63);box-shadow:var(--sh)}.kpi.dark b,.kpi.dark span{color:#fff}
+.demo-btn.big{margin-top:26px;padding:15px 26px;font-size:16px;font-weight:900;color:#fff;background:linear-gradient(135deg,#16294f,#0c5f63);box-shadow:6px 6px 16px rgba(22,41,79,.35),-4px -4px 12px rgba(255,255,255,.7)}
+.cta{font-size:18px;padding:19px;letter-spacing:-.01em;box-shadow:8px 8px 20px rgba(11,122,119,.45),-5px -5px 14px rgba(255,255,255,.85)}
+.form-card{box-shadow:var(--sh),0 0 0 2px rgba(15,154,144,.18)}
+@media(max-width:900px){.hero-title{font-size:44px}.proof span{font-size:12.5px}}
+
+.hero-title{font-size:clamp(36px,4.5vw,68px)}
+.hero-title .ln{display:block;white-space:nowrap}
+@media(max-width:900px){.hero-title{font-size:clamp(34px,10vw,48px)}}

@@ -44,20 +44,26 @@ export default function Intake(p){
   </header>
   <div className="intake">
     <section>
-      <div className="hero-pill"><i/>리포트아이 · 학생부종합전형 진단 스튜디오</div>
-      <h1 className="hero-title emb">생기부 한 장을<br/>입학사정관의 눈으로<br/><span style={{color:"var(--teal2)"}}>냉정하게</span> 읽다</h1>
-      <p className="hero-sub">성적과 이수과목, 탐구의 줄기와 깊이, 역량 점수의 가감 근거, 대학·전형별 현실적인 합격 라인까지. 후하게 말하지 않고 근거와 함께 보수적으로 진단합니다.</p>
+      <div className="hero-pill"><i/>학생부종합전형 정밀 진단 · 입학사정관의 시선</div>
+      <h1 className="hero-title emb"><span className="ln">좋은 말은</span><span className="ln">하지 않습니다.</span><span className="ln"><span className="hl">맞는 말</span>만 합니다.</span></h1>
+      <p className="hero-sub"><b>등급 · 탐구 수준 · 실제 입결</b>을 근거로 현실적인 지원선을 제시합니다. 후하게 평가하지 않기에, 결과를 믿고 지원할 수 있습니다.</p>
+      <div className="proof">
+        <span><b>3중 판정</b> 교과 · 탐구 · 정성</span>
+        <span><b>3,289건</b> 2028 전형 대조</span>
+        <span><b>보수적 채점</b> 합격 사례로 보정</span>
+      </div>
       <div className="kpis">
-        <div className="kpi"><b>5</b><span>핵심 분석 탭</span></div>
+        <div className="kpi dark"><b>5</b><span>핵심 분석 장</span></div>
         <div className="kpi"><b>206</b><span>대학 2028 전형</span></div>
         <div className="kpi"><b>14,188</b><span>학과별 입결</span></div>
         <div className="kpi"><b>4단계</b><span>탐구 깊이 판독</span></div>
       </div>
       <div className="hero-steps">
-        <div className="hero-step"><b>1</b><div><strong>성적 · 이수과목</strong> — 학기별 추이와 원점수 기준 실제 위치</div></div>
-        <div className="hero-step"><b>2</b><div><strong>탐구 계보를 통한 추천학과</strong> — 관심이 어디까지 깊어졌는지</div></div>
-        <div className="hero-step"><b>3</b><div><strong>역량 · 입시 진단 · 종합 리포트</strong> — 점수 근거와 대학·학과·전형 결론</div></div>
+        <div className="hero-step"><b>1</b><div><strong>성적 · 이수과목</strong> — 등급 뒤의 실제 위치까지 읽습니다</div></div>
+        <div className="hero-step"><b>2</b><div><strong>탐구 계보 · 추천학과</strong> — 관심이 어디까지 깊어졌는지 연결선으로 보여줍니다</div></div>
+        <div className="hero-step"><b>3</b><div><strong>역량 · 입시 진단 · 종합</strong> — 어느 대학·학과·전형인지 결론을 냅니다</div></div>
       </div>
+      <button className="demo-btn big" onClick={p.onDemo}>예시 보고서 먼저 보기 →</button>
     </section>
 
     <section className="form-card">
@@ -99,7 +105,7 @@ export default function Intake(p){
       {p.err&&<div className="err">⚠ {p.err}</div>}
       {!p.err&&p.truncWarning&&<div className="warn">ℹ️ {p.truncWarning}</div>}
       {p.step&&<div className="prog"><div className="prog-bar"><i style={{width:p.prog+"%"}}/></div><div className="prog-t"><span>{p.step}</span><span className="mono">{p.prog}%</span></div></div>}
-      <button className="cta" disabled={!ready||p.busy} onClick={p.run}>{p.busy?"분석 중입니다…":"분석 시작하기"}</button>
+      <button className="cta" disabled={!ready||p.busy} onClick={p.run}>{p.busy?"판독 중입니다…":"내 생기부 판정받기"}</button>
       <div className="note">실명·학교명은 AI에 전달하기 전에 가려집니다.</div>
     </section>
   </div></>);
